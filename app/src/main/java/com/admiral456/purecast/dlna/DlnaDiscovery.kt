@@ -2,6 +2,8 @@ package com.admiral456.purecast.dlna
 
 import android.content.Context
 import android.net.wifi.WifiManager
+import android.net.Network
+import com.admiral456.purecast.network.WifiNetworkResolver
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -24,6 +26,7 @@ class DlnaDiscovery(context: Context) {
             setReferenceCounted(false)
             acquire()
         }
+        val wifiNetwork = WifiNetworkResolver.activeWifiNetwork(appContext)
         val locations = linkedSetOf<String>()
         val searchTargets = listOf(
             "urn:schemas-upnp-org:device:MediaRenderer:1",
@@ -33,6 +36,7 @@ class DlnaDiscovery(context: Context) {
 
         try {
             DatagramSocket().use { socket ->
+                wifiNetwork?.let { network -> runCatching { network.bindSocket(socket) } }
                 socket.soTimeout = 300
                 val destination = InetAddress.getByName("239.255.255.250")
                 searchTargets.forEach { target ->
@@ -69,11 +73,13 @@ class DlnaDiscovery(context: Context) {
         } finally {
             if (multicastLock.isHeld) multicastLock.release()
         }
-        return locations.mapNotNull(::loadRendererDescription).distinctBy { it.id }
+        return locations.mapNotNull { location -> loadRendererDescription(location, wifiNetwork) }.distinctBy { it.id }
     }
 
-    private fun loadRendererDescription(location: String): DlnaDevice? {
-        val connection = URL(location).openConnection() as java.net.HttpURLConnection
+    private fun loadRendererDescription(location: String, network: Network?): DlnaDevice? {
+        val url = URL(location)
+        val connection = (network?.let { runCatching { it.openConnection(url) }.getOrNull() }
+            ?: url.openConnection()) as java.net.HttpURLConnection
         connection.connectTimeout = 4_000
         connection.readTimeout = 4_000
         connection.requestMethod = "GET"
