@@ -36,13 +36,17 @@ object UpnpTime {
 }
 
 class DlnaController {
-    suspend fun play(device: DlnaDevice, mediaUrl: String, media: MediaFile) = withContext(Dispatchers.IO) {
-        val didl = didlMetadata(media, mediaUrl)
-        postAction(device, "SetAVTransportURI",
-            "<InstanceID>0</InstanceID><CurrentURI>${xmlEscape(mediaUrl)}</CurrentURI>" +
-            "<CurrentURIMetaData>${xmlEscape(didl)}</CurrentURIMetaData>")
-        postAction(device, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>")
-    }
+    suspend fun play(device: DlnaDevice, mediaUrl: String, media: MediaFile) =
+        play(device, mediaUrl, media.displayName, media.mimeType)
+
+    suspend fun play(device: DlnaDevice, mediaUrl: String, title: String, mimeType: String) =
+        withContext(Dispatchers.IO) {
+            val didl = didlMetadata(title, mimeType, mediaUrl)
+            postAction(device, "SetAVTransportURI",
+                "<InstanceID>0</InstanceID><CurrentURI>${xmlEscape(mediaUrl)}</CurrentURI>" +
+                "<CurrentURIMetaData>${xmlEscape(didl)}</CurrentURIMetaData>")
+            postAction(device, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>")
+        }
 
     suspend fun resume(device: DlnaDevice) = withContext(Dispatchers.IO) {
         postAction(device, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>")
@@ -102,19 +106,22 @@ class DlnaController {
         DlnaTransportInfo(state, status)
     }
 
-    private fun didlMetadata(media: MediaFile, mediaUrl: String): String {
-        val upnpClass = if (media.mimeType.startsWith("image/")) {
+    private fun didlMetadata(media: MediaFile, mediaUrl: String): String =
+        didlMetadata(media.displayName, media.mimeType, mediaUrl)
+
+    private fun didlMetadata(title: String, mimeType: String, mediaUrl: String): String {
+        val upnpClass = if (mimeType.startsWith("image/")) {
             "object.item.imageItem.photo"
         } else {
             "object.item.videoItem"
         }
         return "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" " +
             "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" " +
-            "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\">" +
+            "xmlns:upnp=\"urn:schemas-upnp.org/metadata-1-0/upnp/\">" +
             "<item id=\"0\" parentID=\"-1\" restricted=\"1\">" +
-            "<dc:title>${xmlEscape(media.displayName)}</dc:title>" +
+            "<dc:title>${xmlEscape(title)}</dc:title>" +
             "<upnp:class>$upnpClass</upnp:class>" +
-            "<res protocolInfo=\"http-get:*:${xmlEscape(media.mimeType)}:DLNA.ORG_OP=01;DLNA.ORG_CI=0\">" +
+            "<res protocolInfo=\"http-get:*:${xmlEscape(mimeType)}:DLNA.ORG_OP=01;DLNA.ORG_CI=0\">" +
             "${xmlEscape(mediaUrl)}</res></item></DIDL-Lite>"
     }
 
