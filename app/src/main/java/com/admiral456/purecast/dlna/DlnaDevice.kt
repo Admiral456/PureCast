@@ -7,5 +7,7 @@ data class DlnaDevice(
     val modelName: String?,
     val location: String,
     val avTransportControlUrl: String,
-    val serviceType: String
+    val serviceType: String,
+    val connectionManagerControlUrl: String? = null,
+    val connectionManagerServiceType: String? = null
 )
