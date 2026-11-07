@@ -381,6 +381,7 @@ private fun PureCastScreen() {
                 playingTitle = file.displayName
                 playingSharedEntryId = null
                 transportInfo = null
+                positionInfo = null
                 status = "Odkaz pro TV prohlížeč je připraven. Otevři jej přímo na televizi."
             } catch (error: Exception) {
                 isError = true
@@ -511,15 +512,18 @@ private fun PureCastScreen() {
             try {
                 PureCastPlaybackService.start(appContext)
                 controller.play(device, entry.mediaUrl, entry.title, entry.mimeType)
-                val latest = withContext(Dispatchers.IO) {
-                    GroupQueueClient.setCurrent(credentials, entry.id)
-                }
-                sharedSnapshot = latest
                 playingDevice = device
                 playingFile = null
                 playingTitle = entry.title
                 playingSharedEntryId = entry.id
                 browserUrl = null
+                transportInfo = null
+                positionInfo = null
+                seekPreviewSeconds = 0f
+                val latest = withContext(Dispatchers.IO) {
+                    GroupQueueClient.setCurrent(credentials, entry.id)
+                }
+                sharedSnapshot = latest
                 status = "Do televize byl odeslán originální soubor „${entry.title}“ od ${entry.senderName}."
             } catch (error: Exception) {
                 isError = true
@@ -566,7 +570,10 @@ private fun PureCastScreen() {
 
     fun playNextSharedEntry() {
         val snapshot = sharedSnapshot ?: return
-        val next = GroupQueueLogic.nextEntry(snapshot.entries, snapshot.currentEntryId)
+        val next = GroupQueueLogic.nextEntry(
+            snapshot.entries,
+            playingSharedEntryId ?: snapshot.currentEntryId
+        )
         if (next == null) {
             status = "Ve sdílené frontě už není další položka."
         } else {
@@ -576,7 +583,10 @@ private fun PureCastScreen() {
 
     fun playPreviousSharedEntry() {
         val snapshot = sharedSnapshot ?: return
-        val previous = GroupQueueLogic.previousEntry(snapshot.entries, snapshot.currentEntryId)
+        val previous = GroupQueueLogic.previousEntry(
+            snapshot.entries,
+            playingSharedEntryId ?: snapshot.currentEntryId
+        )
         if (previous == null) {
             status = "Ve sdílené frontě už není předchozí položka."
         } else {
