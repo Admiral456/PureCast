@@ -56,6 +56,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.admiral456.purecast.dlna.DlnaController
+import com.admiral456.purecast.dlna.DlnaCompatibility
+import com.admiral456.purecast.dlna.MediaCompatibility
 import com.admiral456.purecast.dlna.DlnaDevice
 import com.admiral456.purecast.dlna.DlnaDiscovery
 import com.admiral456.purecast.dlna.DlnaTransportInfo
@@ -167,8 +169,18 @@ private fun PureCastScreen() {
         scope.launch {
             busyLabel = file.displayName
             isError = false
+            var compatibilityNote = "Kompatibilitu formátu se nepodařilo ověřit."
             status = "Připravuji přímý přenos: ${file.displayName}"
             try {
+                val sinkProfiles = runCatching { controller.getSinkProtocolInfo(device) }.getOrNull()
+                compatibilityNote = when (DlnaCompatibility.evaluate(file.mimeType, sinkProfiles)) {
+                    MediaCompatibility.SUPPORTED_MIME_TYPE ->
+                        "Televize deklaruje podporu MIME typu ${file.mimeType}; kodek, FPS a HDR tím nejsou ověřené."
+                    MediaCompatibility.MIME_TYPE_NOT_ADVERTISED ->
+                        "Televize tento MIME typ neuvádí mezi podporovanými. Zkouším Direct Play bez převodu."
+                    MediaCompatibility.UNKNOWN ->
+                        "Televize neposkytla seznam formátů; kompatibilita zůstává neověřená."
+                }
                 val streamUrl = withContext(Dispatchers.IO) { mediaServer.publish(file) }
                 playingDevice = device
                 playingFile = file
@@ -177,12 +189,12 @@ private fun PureCastScreen() {
                 positionInfo = null
                 seekPreviewSeconds = 0f
                 controller.play(device, streamUrl, file)
-                status = "Příkaz k přehrání byl odeslán do ${device.friendlyName}."
+                status = "Příkaz k přehrání byl odeslán do ${device.friendlyName}. " + compatibilityNote
             } catch (error: Exception) {
                 playingDevice = null
                 isError = true
                 status = (error.message ?: "Přehrávání se nepodařilo.") +
-                    " Můžeš zkusit přehrávač v prohlížeči televize níže."
+                    " " + compatibilityNote + " Můžeš zkusit přehrávač v prohlížeči televize níže."
             } finally {
                 busyLabel = null
             }
