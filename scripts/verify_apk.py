@@ -47,6 +47,22 @@ def verify_apk(path: Path) -> None:
         if "resources.arsc" not in names:
             raise ValueError("Compiled Android resources are missing")
 
+        required_icons = (
+            "ic_launcher.xml",
+            "ic_launcher_round.xml",
+            "ic_launcher_foreground.xml",
+            "ic_launcher_monochrome.xml",
+        )
+        missing_icons = [
+            icon for icon in required_icons
+            if not any(name.endswith("/" + icon) for name in names)
+        ]
+        if missing_icons:
+            raise ValueError(
+                "PureCast launcher icon resources are missing: "
+                + ", ".join(missing_icons)
+            )
+
         dex_names = sorted(
             name for name in names
             if name == "classes.dex"
