@@ -38,7 +38,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -67,7 +66,8 @@ import com.admiral456.purecast.dlna.UpnpTime
 import com.admiral456.purecast.media.MediaFile
 import com.admiral456.purecast.media.MediaInspector
 import com.admiral456.purecast.media.MediaTechnicalInfo
-import com.admiral456.purecast.server.LocalMediaServer
+import com.admiral456.purecast.playback.PureCastPlaybackService
+import com.admiral456.purecast.playback.PureCastRuntime
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -115,7 +115,6 @@ private fun PureCastScreen() {
     val scope = rememberCoroutineScope()
     val discovery = remember { DlnaDiscovery(appContext) }
     val controller = remember { DlnaController() }
-    val mediaServer = remember { LocalMediaServer(appContext) }
 
     var devices by remember { mutableStateOf<List<DlnaDevice>>(emptyList()) }
     var selectedDeviceId by remember { mutableStateOf<String?>(null) }
@@ -131,10 +130,6 @@ private fun PureCastScreen() {
     var transportInfo by remember { mutableStateOf<DlnaTransportInfo?>(null) }
     var positionInfo by remember { mutableStateOf<DlnaPositionInfo?>(null) }
     var seekPreviewSeconds by remember { mutableStateOf(0f) }
-
-    DisposableEffect(mediaServer) {
-        onDispose { mediaServer.close() }
-    }
 
     val activeDevice = devices.firstOrNull { it.id == selectedDeviceId }
     val mediaPicker = rememberLauncherForActivityResult(
@@ -192,10 +187,13 @@ private fun PureCastScreen() {
                     MediaCompatibility.UNKNOWN ->
                         "Televize neposkytla seznam formátů; kompatibilita zůstává neověřená."
                 }
-                val streamUrl = withContext(Dispatchers.IO) { mediaServer.publish(file) }
+                PureCastPlaybackService.start(appContext)
+                val streamUrl = withContext(Dispatchers.IO) {
+                    PureCastRuntime.getMediaServer(appContext).publish(file)
+                }
                 playingDevice = device
                 playingFile = file
-                browserUrl = mediaServer.browserPlayerUrl(streamUrl)
+                browserUrl = PureCastRuntime.getMediaServer(appContext).browserPlayerUrl(streamUrl)
                 transportInfo = null
                 positionInfo = null
                 seekPreviewSeconds = 0f
@@ -218,8 +216,11 @@ private fun PureCastScreen() {
             isError = false
             status = "Připravuji odkaz pro prohlížeč televize…"
             try {
-                val streamUrl = withContext(Dispatchers.IO) { mediaServer.publish(file) }
-                browserUrl = mediaServer.browserPlayerUrl(streamUrl)
+                PureCastPlaybackService.start(appContext)
+                val streamUrl = withContext(Dispatchers.IO) {
+                    PureCastRuntime.getMediaServer(appContext).publish(file)
+                }
+                browserUrl = PureCastRuntime.getMediaServer(appContext).browserPlayerUrl(streamUrl)
                 playingDevice = null
                 playingFile = file
                 transportInfo = null
@@ -518,6 +519,7 @@ private fun PureCastScreen() {
                                 onClick = {
                                     runPlaybackAction("Přehrávání zastaveno.") {
                                         controller.stop(it)
+                                        PureCastPlaybackService.stop(appContext)
                                         playingFile = null
                                         browserUrl = null
                                         transportInfo = null
