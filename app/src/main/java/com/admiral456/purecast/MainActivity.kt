@@ -683,7 +683,6 @@ private fun PureCastScreen() {
                     }
                 }
             }
-        }
 
         if (playbackQueue.isNotEmpty()) {
             item {
