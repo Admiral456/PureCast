@@ -14,7 +14,7 @@ PureCast is an Android application for sending original photos and videos from p
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.7.0
+## Current implementation — 0.8.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
@@ -32,8 +32,10 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - Progressive technical metadata inspection in small batches, with cancellation when a new selection replaces the previous one.
 - Technical metadata inspection for image size and video resolution, frame rate, video/audio MIME codecs, bitrate, duration and available HDR transfer metadata.
 - Unit tests for HTTP range handling, UPnP time values, DLNA MIME profiles and sender/receiver brand classification.
-- GitHub Actions CI for unit tests, debug APK and optimized R8 release APK builds, and separate artifact uploads.
-- Release build removes unused code and resources. Compose UI Tooling is not packaged into the app because this project does not use it at runtime.
+- GitHub Actions CI builds debug, R8-optimized release and unminified release APK variants.
+- CI checks that DLNA commands, local media routes, shared-queue API endpoints and playback UI strings remain in both release packages after packaging.
+- CI uploads R8 mapping/usage/kept-class reports so removed code can be reviewed.
+- The unminified release variant uses the same source and features but disables R8 and resource shrinking. It exists for size comparison and diagnosis, not because the optimized build intentionally omits features.
 
 ## Shared queue requirements and limitations
 
@@ -63,14 +65,18 @@ Samsung Smart TVs from 2016 onward use the Tizen platform, but codec and media s
 Open this repository in Android Studio and sync the Gradle project, or run:
 
 ```bash
-gradle :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease
+gradle :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:assembleUnminified
 ```
 
-The installable debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`. The smaller, R8-optimized release APK is written to `app/build/outputs/apk/release/app-release.apk`. CI signs the release APK with its temporary debug certificate for sideload testing; this is not a Play Store signing key.
+The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`. The R8-optimized release APK is written to `app/build/outputs/apk/release/app-release.apk`. The full-size, unminified release APK is written to `app/build/outputs/apk/unminified/app-unminified.apk`. CI signs both release variants with its temporary debug certificate for sideload testing; this is not a Play Store signing key.
 
 ## Download
 
-The latest successful build is available from [GitHub Actions artifacts](https://github.com/Admiral456/PureCast/actions). Download `PureCast-release-apk` for the smaller R8-optimized installation build, or `PureCast-debug-apk` for an unminified diagnostic build.
+The latest successful build is available from [GitHub Actions artifacts](https://github.com/Admiral456/PureCast/actions). Download `PureCast-release-apk` for the recommended R8-optimized installation build, `PureCast-full-apk` for the same source with shrinking disabled, or `PureCast-debug-apk` for the debug build. `PureCast-r8-audit` contains the class mapping, kept-class list and removed-code report.
+
+## Why the optimized APK is small
+
+PureCast does not bundle a video transcoder, codec framework, sample photos, sample videos, downloaded media or large image assets. It serves original files from Android content URIs and asks the TV to decode them. The release APK is therefore mostly app code and a small resource table. R8 removes unused parts of the AndroidX/Compose dependency graph; the full-size unminified release is available as a separate artifact to compare packaging without that shrink step. CI verifies critical feature markers in both release APKs and publishes the R8 report. A small APK is not proof of missing functionality, and adding dummy files to increase its size would not make the app more complete.
 
 ## Quality and compatibility notes
 
