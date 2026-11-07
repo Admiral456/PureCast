@@ -25,7 +25,7 @@
 - [x] Filename search and photo/video type filters.
 - [x] Memory-conscious thumbnail decoding for older Android versions.
 - [x] Unit tests for byte ranges, UPnP time values, MIME compatibility, media filters, media tokens and brand classification.
-- [x] GitHub Actions tests and debug APK build.
+- [x] GitHub Actions tests, debug APK build and R8-optimized release APK build.
 
 ## Milestone 1 — Samsung and LG real-device interoperability
 
@@ -45,6 +45,7 @@
 - [x] Queue navigation stops at the first/last item and is covered by unit tests.
 - [ ] Albums, date-based sorting and additional library organization.
 - [x] Shared local group queue synchronized between Android phones on the same Wi-Fi, with host-only playback/reorder/remove permissions.
+- [x] Shared queue previous/next navigation and stop-at-boundaries behavior.
 - [x] Show sender identity for items submitted to a shared queue.
 - [x] Pair participants using a short invite code and issue per-participant high-entropy access tokens.
 - [x] Validate shared media URLs as private IPv4 PureCast media-token endpoints.
@@ -56,10 +57,11 @@
 - [x] Prefer Wi-Fi rather than mobile/VPN routes for TV discovery and local playback URLs when available.
 - [ ] Add large-file, slow-network and interrupted-transfer stress tests.
 - [ ] Add explicit media server access revocation and token refresh.
-- [ ] Add QR-code pairing, persistent sessions and participant removal/revocation.
+- [x] Revoke a participant token and remove their submitted items when they explicitly leave the group.
+- [ ] Add QR-code pairing, persistent sessions and host-initiated participant removal.
 - [ ] Add integration tests for the shared-queue HTTP server/client and multi-phone media streaming.
 - [ ] Validate all request paths, content ranges and response headers with integration tests.
-- [ ] Review LAN exposure and optionally bind to the active Wi-Fi interface rather than all interfaces.
+- [x] Bind the shared queue coordinator to the active Wi-Fi IPv4 interface rather than all interfaces.
 - [ ] Before targeting Android API 37, declare and request ACCESS_LOCAL_NETWORK.
 
 ## Release acceptance checks
