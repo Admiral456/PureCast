@@ -16,7 +16,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 
 ## Current implementation — 0.9.0
 
-- Kotlin + Jetpack Compose, Czech UI, light/dark themes.
+- Kotlin + Jetpack Compose, Czech UI, light/dark themes, custom adaptive PureCast launcher icon.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
 - TV brand/platform detection from UPnP manufacturer, model and friendly-name information.
 - SSDP discovery for UPnP/DLNA MediaRenderer devices across common UPnP search targets, preferring the active Wi-Fi route when multiple networks or VPNs are present.
