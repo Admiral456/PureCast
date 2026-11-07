@@ -14,7 +14,6 @@ import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -33,7 +32,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
     @Synchronized
     fun publish(media: MediaFile): String {
         val server = ensureServer()
-        val token = UUID.randomUUID().toString()
+        val token = MediaTokenGenerator.create()
         mediaByToken[token] = PublishedMedia(media, System.currentTimeMillis() + TOKEN_LIFETIME_MS)
         pruneExpiredTokens()
         val address = findLocalIpv4()
@@ -399,6 +398,6 @@ class LocalMediaServer(private val context: Context) : Closeable {
         private const val MAX_HEADER_BYTES = 16_384
         private const val BUFFER_SIZE = 64 * 1024
         private const val TOKEN_LIFETIME_MS = 6 * 60 * 60 * 1_000L
-        private val MEDIA_PATH = Regex("^/(media|tv)/([0-9a-fA-F-]{36})$")
+        private val MEDIA_PATH = Regex("^/(media|tv)/([A-Za-z0-9_-]{12})$")
     }
 }
