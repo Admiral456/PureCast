@@ -10,7 +10,7 @@
 - [x] Single-range HTTP responses for seeking.
 - [x] Unit tests for range parsing.
 - [x] GitHub Actions debug build workflow.
-- [ ] Run CI and resolve any build errors.
+- [x] GitHub Actions CI: Kotlin compilation, unit tests, and debug APK build passed (run #6, 7 November 2026).
 - [ ] Test against the LG 55UJ7507 and at least one other DLNA renderer.
 
 ## Milestone 1 — playback reliability
