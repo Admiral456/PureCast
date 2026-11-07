@@ -15,8 +15,12 @@ import java.net.Socket
 import java.net.URI
 import java.security.SecureRandom
 import java.util.UUID
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadFactory
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 /** LAN-only coordinator. Media bytes stay on each sender and stream directly to the TV. */
 class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
@@ -30,7 +34,18 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
     private val tokens = ConcurrentHashMap<String, String>()
     private val entries = mutableListOf<GroupQueueEntry>()
     private val failedAttempts = mutableMapOf<String, JoinAttempt>()
-    private val executor = Executors.newCachedThreadPool()
+    private val clientSockets = ConcurrentHashMap.newKeySet<Socket>()
+    private val executor = ThreadPoolExecutor(
+        MIN_CLIENT_THREADS,
+        MAX_CLIENT_THREADS,
+        CLIENT_KEEP_ALIVE_SECONDS,
+        TimeUnit.SECONDS,
+        ArrayBlockingQueue(MAX_QUEUED_CLIENTS),
+        ThreadFactory { task ->
+            Thread(task, "PureCast-GroupQueue-client").apply { isDaemon = true }
+        },
+        ThreadPoolExecutor.AbortPolicy()
+    )
     @Volatile private var serverSocket: ServerSocket? = null
     @Volatile private var baseUrl: String? = null
     @Volatile private var revision = 0L
@@ -60,7 +75,27 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
             while (!socket.isClosed) {
                 try {
                     val client = socket.accept()
-                    executor.execute { handleClient(client) }
+                    clientSockets.add(client)
+                    try {
+                        executor.execute {
+                            try {
+                                handleClient(client)
+                            } finally {
+                                clientSockets.remove(client)
+                            }
+                        }
+                    } catch (_: RejectedExecutionException) {
+                        clientSockets.remove(client)
+                        try {
+                            respond(client, 503, error("Server je vytížený. Zkus to znovu."))
+                        } catch (_: Exception) {
+                        } finally {
+                            try {
+                                client.close()
+                            } catch (_: Exception) {
+                            }
+                        }
+                    }
                 } catch (_: Exception) {
                     if (socket.isClosed) return@Thread
                 }
@@ -375,7 +410,7 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
         val reason = when (status) {
             200 -> "OK"; 400 -> "Bad Request"; 401 -> "Unauthorized"; 403 -> "Forbidden"
             404 -> "Not Found"; 409 -> "Conflict"; 413 -> "Payload Too Large"
-            429 -> "Too Many Requests"; else -> "Error"
+            429 -> "Too Many Requests"; 503 -> "Service Unavailable"; else -> "Error"
         }
         val header = "HTTP/1.1 $status $reason\r\nContent-Type: application/json; charset=utf-8\r\n" +
             "Content-Length: ${body.size}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n" +
@@ -389,6 +424,13 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
     override fun close() {
         try { serverSocket?.close() } catch (_: Exception) {}
         serverSocket = null
+        clientSockets.forEach { client ->
+            try {
+                client.close()
+            } catch (_: Exception) {
+            }
+        }
+        clientSockets.clear()
         executor.shutdownNow()
         tokens.clear()
         synchronized(lock) {
@@ -401,6 +443,10 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
     companion object {
         private const val MAX_HEADER_BYTES = 8_192
         private const val MAX_BODY_BYTES = 8_192
+        private const val MIN_CLIENT_THREADS = 2
+        private const val MAX_CLIENT_THREADS = 6
+        private const val MAX_QUEUED_CLIENTS = 24
+        private const val CLIENT_KEEP_ALIVE_SECONDS = 30L
         private const val MAX_ENTRIES = 100
         private const val MAX_URL_LENGTH = 2_048
         private const val MAX_JOIN_ATTEMPTS = 10
