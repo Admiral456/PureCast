@@ -480,8 +480,7 @@ private fun PureCastScreen() {
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             items(visibleFiles, key = { it.uri.toString() }) { file ->
-                                file ->
-                                    Card(
+                                Card(
                                         shape = RoundedCornerShape(15.dp),
                                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                                     ) {
