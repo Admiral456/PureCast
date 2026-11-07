@@ -25,7 +25,8 @@
 - [x] Filename search and photo/video type filters.
 - [x] Memory-conscious thumbnail decoding for older Android versions.
 - [x] Unit tests for byte ranges, UPnP time values, MIME compatibility, media filters, media tokens and brand classification.
-- [x] GitHub Actions tests, debug APK build and R8-optimized release APK build.
+- [x] GitHub Actions tests, debug and release APK builds, and R8 mapping/usage audit artifact.
+- [x] APK smoke checks for DLNA commands, streaming paths, shared-queue API routes and playback UI markers.
 
 ## Milestone 1 — Samsung and LG real-device interoperability
 
@@ -60,6 +61,8 @@
 - [x] Revoke a participant token and remove their submitted items when they explicitly leave the group.
 - [ ] Add QR-code pairing, persistent sessions and host-initiated participant removal.
 - [ ] Add integration tests for the shared-queue HTTP server/client and multi-phone media streaming.
+- [x] Keep shared playback controls visible when the currently playing item was added by another phone.
+- [x] Keep the host's foreground service active while its shared queue session is connected.
 - [ ] Validate all request paths, content ranges and response headers with integration tests.
 - [x] Bind the shared queue coordinator to the active Wi-Fi IPv4 interface rather than all interfaces.
 - [ ] Before targeting Android API 37, declare and request ACCESS_LOCAL_NETWORK.
