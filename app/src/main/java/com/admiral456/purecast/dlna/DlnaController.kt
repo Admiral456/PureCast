@@ -75,6 +75,22 @@ class DlnaController {
         )
     }
 
+    suspend fun getSinkProtocolInfo(device: DlnaDevice): List<String>? = withContext(Dispatchers.IO) {
+        val controlUrl = device.connectionManagerControlUrl ?: return@withContext null
+        val serviceType = device.connectionManagerServiceType ?: return@withContext null
+        val response = postAction(
+            device,
+            "GetProtocolInfo",
+            "",
+            controlUrl = controlUrl,
+            serviceType = serviceType
+        )
+        val document = secureDocumentFactory().newDocumentBuilder()
+            .parse(response.byteInputStream(Charsets.UTF_8))
+        val sink = document.getElementsByTagName("Sink").item(0)?.textContent.orEmpty()
+        sink.split(',').map { it.trim() }.filter { it.isNotBlank() }.ifEmpty { null }
+    }
+
     suspend fun getTransportInfo(device: DlnaDevice): DlnaTransportInfo = withContext(Dispatchers.IO) {
         val response = postAction(device, "GetTransportInfo", "<InstanceID>0</InstanceID>")
         val factory = secureDocumentFactory()
@@ -102,8 +118,13 @@ class DlnaController {
             "${xmlEscape(mediaUrl)}</res></item></DIDL-Lite>"
     }
 
-    private fun postAction(device: DlnaDevice, action: String, body: String): String {
-        val serviceType = device.serviceType
+    private fun postAction(
+        device: DlnaDevice,
+        action: String,
+        body: String,
+        controlUrl: String = device.avTransportControlUrl,
+        serviceType: String = device.serviceType
+    ): String {
         val envelope =
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
             "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" " +
@@ -111,7 +132,7 @@ class DlnaController {
             "<s:Body><u:$action xmlns:u=\"${xmlEscape(serviceType)}\">" +
             "$body</u:$action></s:Body></s:Envelope>"
 
-        val connection = URL(device.avTransportControlUrl).openConnection() as HttpURLConnection
+        val connection = URL(controlUrl).openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 6_000
             connection.readTimeout = 8_000
