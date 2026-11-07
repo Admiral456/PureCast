@@ -2,14 +2,11 @@ package com.admiral456.purecast.group
 
 import org.json.JSONObject
 import java.net.HttpURLConnection
-import java.net.Inet4Address
-import java.net.InetAddress
-import java.net.URI
 import java.net.URL
 
 object GroupQueueClient {
     fun join(address: String, inviteCode: String, displayName: String): GroupQueueJoinResult {
-        val baseUrl = normalizeAddress(address)
+        val baseUrl = GroupQueueAddress.normalize(address)
         val response = request(
             baseUrl, null, "POST", "/v1/join",
             JSONObject().put("code", inviteCode.trim().uppercase()).put("displayName", displayName.trim().take(40))
@@ -100,32 +97,6 @@ object GroupQueueClient {
         }
     }
 
-    private fun normalizeAddress(value: String): String {
-        val raw = value.trim().removeSuffix("/")
-        val candidate = if (raw.contains("://")) raw else "http://$raw"
-        val uri = try {
-            URI(candidate)
-        } catch (_: Exception) {
-            throw IllegalArgumentException("Zadej adresu hostitele ve formátu 192.168.1.20:port.")
-        }
-        if (uri.scheme != "http" || uri.userInfo != null || (uri.path.isNotEmpty() && uri.path != "/") ||
-            uri.query != null || uri.fragment != null || uri.port !in 1..65535
-        ) {
-            throw IllegalArgumentException("Adresa hostitele není platná. Použij HTTP adresu v místní Wi-Fi síti.")
-        }
-        val host = uri.host ?: throw IllegalArgumentException("V adrese chybí IPv4 adresa hostitele.")
-        if (!IPV4_PATTERN.matches(host)) {
-            throw IllegalArgumentException("Adresa hostitele musí být místní IPv4 adresa.")
-        }
-        val address = InetAddress.getByName(host)
-        if (address !is Inet4Address || !address.isSiteLocalAddress ||
-            address.isLoopbackAddress || address.isLinkLocalAddress || address.isAnyLocalAddress
-        ) {
-            throw IllegalArgumentException("Hostitel musí být dostupný přes soukromou IPv4 adresu Wi-Fi.")
-        }
-        return "http://$host:${uri.port}"
-    }
-
     private fun parseSnapshot(json: JSONObject): GroupQueueSnapshot {
         val membersJson = json.optJSONArray("participants")
         val participants = buildList {
@@ -167,5 +138,4 @@ object GroupQueueClient {
         )
     }
 
-    private val IPV4_PATTERN = Regex("^\\d{1,3}(?:\\.\\d{1,3}){3}$")
 }
