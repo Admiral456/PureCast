@@ -1,29 +1,41 @@
 package com.admiral456.purecast.dlna
 
+import com.admiral456.purecast.media.MediaFile
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class DlnaController {
-    suspend fun play(device: DlnaDevice, mediaUrl: String) = withContext(Dispatchers.IO) {
-        val transport = device.serviceType
+    suspend fun play(device: DlnaDevice, mediaUrl: String, media: MediaFile) = withContext(Dispatchers.IO) {
+        val didl = didlMetadata(media, mediaUrl)
         postAction(
             device,
-            transport,
             "SetAVTransportURI",
             "<InstanceID>0</InstanceID><CurrentURI>" + xmlEscape(mediaUrl) +
-                "</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>"
+                "</CurrentURI><CurrentURIMetaData>" + xmlEscape(didl) + "</CurrentURIMetaData>"
         )
-        postAction(device, transport, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>")
+        postAction(device, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>")
     }
 
-    private fun postAction(
-        device: DlnaDevice,
-        serviceType: String,
-        action: String,
-        body: String
-    ) {
+    private fun didlMetadata(media: MediaFile, mediaUrl: String): String {
+        val upnpClass = if (media.mimeType.startsWith("image/")) {
+            "object.item.imageItem.photo"
+        } else {
+            "object.item.videoItem"
+        }
+        return "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" " +
+            "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" " +
+            "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\">" +
+            "<item id=\"0\" parentID=\"-1\" restricted=\"1\">" +
+            "<dc:title>" + xmlEscape(media.displayName) + "</dc:title>" +
+            "<upnp:class>" + upnpClass + "</upnp:class>" +
+            "<res protocolInfo=\"http-get:*:" + xmlEscape(media.mimeType) + ":*\">" +
+            xmlEscape(mediaUrl) + "</res></item></DIDL-Lite>"
+    }
+
+    private fun postAction(device: DlnaDevice, action: String, body: String) {
+        val serviceType = device.serviceType
         val envelope =
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
                 "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" " +
