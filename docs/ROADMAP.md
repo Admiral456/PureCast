@@ -44,8 +44,10 @@
 - [x] Local playback queue with add/remove, reorder, start-from-beginning, previous and next controls.
 - [x] Queue navigation stops at the first/last item and is covered by unit tests.
 - [ ] Albums, date-based sorting and additional library organization.
-- [ ] Shared local group queue synchronized between phones, with host/queue permissions.
-- [ ] Show sender identity for items submitted to a shared queue.
+- [x] Shared local group queue synchronized between Android phones on the same Wi-Fi, with host-only playback/reorder/remove permissions.
+- [x] Show sender identity for items submitted to a shared queue.
+- [x] Pair participants using a short invite code and issue per-participant high-entropy access tokens.
+- [x] Validate shared media URLs as private IPv4 PureCast media-token endpoints.
 - [ ] Improve per-device compatibility profiles from actual UPnP protocolInfo and test results.
 - [ ] Improve friendly error explanations for Wi-Fi isolation, unsupported format and expired file URI access.
 
@@ -54,6 +56,8 @@
 - [x] Prefer Wi-Fi rather than mobile/VPN routes for TV discovery and local playback URLs when available.
 - [ ] Add large-file, slow-network and interrupted-transfer stress tests.
 - [ ] Add explicit media server access revocation and token refresh.
+- [ ] Add QR-code pairing, persistent sessions and participant removal/revocation.
+- [ ] Add integration tests for the shared-queue HTTP server/client and multi-phone media streaming.
 - [ ] Validate all request paths, content ranges and response headers with integration tests.
 - [ ] Review LAN exposure and optionally bind to the active Wi-Fi interface rather than all interfaces.
 - [ ] Before targeting Android API 37, declare and request ACCESS_LOCAL_NETWORK.
