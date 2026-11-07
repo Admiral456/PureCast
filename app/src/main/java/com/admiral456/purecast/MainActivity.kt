@@ -315,6 +315,13 @@ private fun PureCastScreen() {
     }
 
     fun prepareBrowser(file: MediaFile) {
+        val existingQueueIndex = playbackQueue.indexOfFirst { it.uri == file.uri }
+        if (existingQueueIndex < 0) {
+            playbackQueue.add(file)
+            queueCurrentIndex = playbackQueue.lastIndex
+        } else {
+            queueCurrentIndex = existingQueueIndex
+        }
         scope.launch {
             busyLabel = file.displayName
             isError = false
