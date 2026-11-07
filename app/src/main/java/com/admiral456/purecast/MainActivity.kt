@@ -45,6 +45,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.produceState
@@ -81,6 +82,12 @@ import com.admiral456.purecast.media.MediaKindFilter
 import com.admiral456.purecast.media.MediaLibraryFilter
 import com.admiral456.purecast.media.MediaThumbnailLoader
 import com.admiral456.purecast.media.MediaTechnicalInfo
+import com.admiral456.purecast.group.GroupQueueClient
+import com.admiral456.purecast.group.GroupQueueCredentials
+import com.admiral456.purecast.group.GroupQueueEntry
+import com.admiral456.purecast.group.GroupQueueLogic
+import com.admiral456.purecast.group.GroupQueueServer
+import com.admiral456.purecast.group.GroupQueueSnapshot
 import com.admiral456.purecast.playback.PlaybackQueueLogic
 import com.admiral456.purecast.playback.PureCastPlaybackService
 import com.admiral456.purecast.playback.PureCastRuntime
@@ -89,6 +96,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -141,6 +149,13 @@ private fun PureCastScreen() {
     val selectedFiles = remember { mutableStateListOf<MediaFile>() }
     val playbackQueue = remember { mutableStateListOf<MediaFile>() }
     var queueCurrentIndex by remember { mutableStateOf(-1) }
+    var groupServer by remember { mutableStateOf<GroupQueueServer?>(null) }
+    var sharedCredentials by remember { mutableStateOf<GroupQueueCredentials?>(null) }
+    var sharedSnapshot by remember { mutableStateOf<GroupQueueSnapshot?>(null) }
+    var groupAddressInput by remember { mutableStateOf("") }
+    var groupCodeInput by remember { mutableStateOf("") }
+    var sharedBusy by remember { mutableStateOf(false) }
+    var sharedSyncError by remember { mutableStateOf<String?>(null) }
     val technicalInfo = remember { mutableStateMapOf<String, MediaTechnicalInfo>() }
     var mediaInspectionJob by remember { mutableStateOf<Job?>(null) }
     var mediaSearchQuery by remember { mutableStateOf("") }
@@ -158,6 +173,28 @@ private fun PureCastScreen() {
     var seekPreviewSeconds by remember { mutableStateOf(0f) }
 
     val activeDevice = devices.firstOrNull { it.id == selectedDeviceId }
+    DisposableEffect(groupServer) {
+        onDispose { groupServer?.close() }
+    }
+
+    LaunchedEffect(sharedCredentials, groupServer) {
+        val credentials = sharedCredentials ?: return@LaunchedEffect
+        while (true) {
+            try {
+                val latest = if (credentials.isHost) {
+                    groupServer?.snapshot()
+                } else {
+                    withContext(Dispatchers.IO) { GroupQueueClient.getState(credentials) }
+                }
+                if (latest != null) sharedSnapshot = latest
+                sharedSyncError = null
+            } catch (error: Exception) {
+                sharedSyncError = error.message ?: "Spojení se sdílenou frontou bylo přerušeno."
+            }
+            delay(2_000)
+        }
+    }
+
     val mediaPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 50)
     ) { uris ->
@@ -342,6 +379,174 @@ private fun PureCastScreen() {
             } finally {
                 busyLabel = null
             }
+        }
+    }
+
+    fun createSharedGroup() {
+        if (sharedCredentials != null || sharedBusy) return
+        scope.launch {
+            sharedBusy = true
+            sharedSyncError = null
+            try {
+                val server = withContext(Dispatchers.IO) {
+                    GroupQueueServer(
+                        appContext,
+                        "${senderInfo.brand.displayName} ${senderInfo.model}"
+                    ).also { it.start() }
+                }
+                groupServer = server
+                val credentials = server.hostCredentials()
+                sharedCredentials = credentials
+                sharedSnapshot = server.snapshot()
+                groupAddressInput = credentials.baseUrl
+                groupCodeInput = credentials.inviteCode.orEmpty()
+                status = "Sdílená skupina byla založena. Ostatní telefony připoj přes adresu a pozvánkový kód."
+                isError = false
+            } catch (error: Exception) {
+                isError = true
+                status = error.message ?: "Sdílenou skupinu se nepodařilo založit."
+            } finally {
+                sharedBusy = false
+            }
+        }
+    }
+
+    fun joinSharedGroup() {
+        if (sharedCredentials != null || sharedBusy) return
+        scope.launch {
+            sharedBusy = true
+            sharedSyncError = null
+            try {
+                val joined = withContext(Dispatchers.IO) {
+                    GroupQueueClient.join(
+                        groupAddressInput,
+                        groupCodeInput,
+                        "${senderInfo.brand.displayName} ${senderInfo.model}"
+                    )
+                }
+                sharedCredentials = joined.credentials
+                sharedSnapshot = joined.snapshot
+                status = "Telefon je připojený ke sdílené frontě."
+                isError = false
+            } catch (error: Exception) {
+                isError = true
+                status = error.message ?: "Připojení ke sdílené frontě selhalo."
+            } finally {
+                sharedBusy = false
+            }
+        }
+    }
+
+    fun leaveSharedGroup() {
+        groupServer?.close()
+        groupServer = null
+        sharedCredentials = null
+        sharedSnapshot = null
+        sharedSyncError = null
+        status = "Odpojil ses od sdílené fronty."
+    }
+
+    fun addToSharedQueue(file: MediaFile) {
+        val credentials = sharedCredentials ?: return
+        if (sharedBusy) return
+        scope.launch {
+            sharedBusy = true
+            try {
+                PureCastPlaybackService.start(appContext)
+                val mediaUrl = withContext(Dispatchers.IO) {
+                    PureCastRuntime.getMediaServer(appContext).publish(file)
+                }
+                val latest = withContext(Dispatchers.IO) {
+                    GroupQueueClient.add(credentials, file.displayName, file.mimeType, mediaUrl, file.sizeBytes)
+                }
+                sharedSnapshot = latest
+                status = "Přidáno do sdílené fronty: ${file.displayName}"
+                isError = false
+            } catch (error: Exception) {
+                isError = true
+                status = error.message ?: "Položku se nepodařilo přidat do sdílené fronty."
+            } finally {
+                sharedBusy = false
+            }
+        }
+    }
+
+    fun playSharedEntry(entry: GroupQueueEntry) {
+        val credentials = sharedCredentials
+        val device = activeDevice
+        if (credentials == null || !credentials.isHost) {
+            status = "Přehrávání sdílené fronty řídí hostitel."
+            return
+        }
+        if (device == null) {
+            isError = true
+            status = "Hostitel musí nejdříve vybrat DLNA televizor."
+            return
+        }
+        if (busyLabel != null) return
+        scope.launch {
+            busyLabel = entry.title
+            isError = false
+            try {
+                controller.play(device, entry.mediaUrl, entry.title, entry.mimeType)
+                val latest = withContext(Dispatchers.IO) {
+                    GroupQueueClient.setCurrent(credentials, entry.id)
+                }
+                sharedSnapshot = latest
+                playingDevice = device
+                playingFile = null
+                browserUrl = null
+                status = "Do televize byl odeslán originální soubor „${entry.title}“ od ${entry.senderName}."
+            } catch (error: Exception) {
+                isError = true
+                status = error.message ?: "Položku sdílené fronty se nepodařilo přehrát."
+            } finally {
+                busyLabel = null
+            }
+        }
+    }
+
+    fun moveSharedEntry(fromIndex: Int, toIndex: Int) {
+        val credentials = sharedCredentials ?: return
+        if (!credentials.isHost || sharedBusy) return
+        scope.launch {
+            sharedBusy = true
+            try {
+                sharedSnapshot = withContext(Dispatchers.IO) {
+                    GroupQueueClient.move(credentials, fromIndex, toIndex)
+                }
+            } catch (error: Exception) {
+                sharedSyncError = error.message ?: "Pořadí sdílené fronty se nepodařilo změnit."
+            } finally {
+                sharedBusy = false
+            }
+        }
+    }
+
+    fun removeSharedEntry(entry: GroupQueueEntry) {
+        val credentials = sharedCredentials ?: return
+        if (!credentials.isHost || sharedBusy) return
+        scope.launch {
+            sharedBusy = true
+            try {
+                sharedSnapshot = withContext(Dispatchers.IO) {
+                    GroupQueueClient.remove(credentials, entry.id)
+                }
+            } catch (error: Exception) {
+                sharedSyncError = error.message ?: "Položku sdílené fronty se nepodařilo odebrat."
+            } finally {
+                sharedBusy = false
+            }
+        }
+    }
+
+    fun playNextSharedEntry() {
+        val snapshot = sharedSnapshot ?: return
+        val next = GroupQueueLogic.nextEntry(snapshot.entries, snapshot.currentEntryId)
+        if (next == null) {
+            status = "Ve sdílené frontě už není další položka."
+        } else {
+            playSharedEntry(next)
         }
     }
 
@@ -675,6 +880,15 @@ private fun PureCastScreen() {
                                             ) {
                                                 Text(if (playbackQueue.any { it.uri == file.uri }) "✓ Ve frontě" else "＋ Přidat do fronty")
                                             }
+                                            if (sharedCredentials != null) {
+                                                TextButton(
+                                                    onClick = { addToSharedQueue(file) },
+                                                    enabled = !sharedBusy,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Text("＋ Přidat do sdílené fronty")
+                                                }
+                                            }
                                             }
                                         }
                                     }
@@ -780,6 +994,162 @@ private fun PureCastScreen() {
                             )
                         }
                     }
+                }
+            }
+        }
+
+        item {
+            SectionTitle(
+                "Sdílená fronta",
+                "Spoj několik Android telefonů přes stejnou Wi-Fi. Originální soubory zůstávají v telefonech odesílatelů."
+            )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (sharedCredentials == null) {
+                        Text(
+                            "Jeden telefon založí skupinu. Ostatní se připojí pomocí adresy hostitele a osmiznakového kódu.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = groupAddressInput,
+                            onValueChange = { groupAddressInput = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text("Adresa hostitele") },
+                            placeholder = { Text("192.168.1.20:49152") }
+                        )
+                        OutlinedTextField(
+                            value = groupCodeInput,
+                            onValueChange = { groupCodeInput = it.filter { ch -> ch.isLetterOrDigit() }.take(8).uppercase() },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text("Pozvánkový kód") },
+                            placeholder = { Text("8 znaků") }
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { createSharedGroup() },
+                                enabled = !sharedBusy,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(if (sharedBusy) "Pracuji…" else "Založit skupinu")
+                            }
+                            OutlinedButton(
+                                onClick = { joinSharedGroup() },
+                                enabled = !sharedBusy && groupAddressInput.isNotBlank() && groupCodeInput.length == 8,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Připojit se")
+                            }
+                        }
+                    } else {
+                        val credentials = sharedCredentials!!
+                        val snapshot = sharedSnapshot
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            StatusTag(if (credentials.isHost) "HOSTITEL" else "PŘIPOJENO", MaterialTheme.colorScheme.secondary)
+                            Spacer(Modifier.weight(1f))
+                            TextButton(onClick = { leaveSharedGroup() }) { Text("Odpojit") }
+                        }
+                        Text(
+                            "Účastníci: ${snapshot?.participants?.size ?: 1} · Položky: ${snapshot?.entries?.size ?: 0}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (credentials.isHost) {
+                            Text("Adresa: ${credentials.baseUrl}", style = MaterialTheme.typography.bodySmall)
+                            Text("Pozvánkový kód: ${credentials.inviteCode}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            OutlinedButton(
+                                onClick = {
+                                    val clipboard = appContext.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(
+                                        ClipData.newPlainText(
+                                            "PureCast pozvánka",
+                                            "${credentials.baseUrl}\n${credentials.inviteCode}"
+                                        )
+                                    )
+                                    Toast.makeText(appContext, "Pozvánka zkopírována.", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Kopírovat adresu a kód") }
+                        } else {
+                            Text(
+                                "Přidávat položky může každý účastník. Přehrávání, odebírání a změnu pořadí řídí hostitel.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (snapshot?.entries.isNullOrEmpty()) {
+                            EmptyState("Sdílená fronta je prázdná", "Vyber média v galerii a přidej je do sdílené fronty.")
+                        } else {
+                            snapshot?.entries?.forEachIndexed { index, entry ->
+                                Card(
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (entry.id == snapshot.currentEntryId)
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.09f)
+                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(11.dp),
+                                        verticalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            StatusTag((index + 1).toString(), MaterialTheme.colorScheme.secondary)
+                                            Spacer(Modifier.width(8.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(entry.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                                Text(
+                                                    "${entry.senderName} · ${entry.mimeType} · ${formatSize(entry.sizeBytes)}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            if (entry.id == snapshot.currentEntryId) {
+                                                StatusTag("PŘEHRÁVÁ SE", MaterialTheme.colorScheme.primary)
+                                            }
+                                        }
+                                        if (credentials.isHost) {
+                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                TextButton(
+                                                    onClick = { playSharedEntry(entry) },
+                                                    enabled = activeDevice != null && busyLabel == null && !sharedBusy
+                                                ) { Text("Přehrát") }
+                                                TextButton(onClick = { moveSharedEntry(index, index - 1) }, enabled = index > 0 && !sharedBusy) { Text("↑") }
+                                                TextButton(onClick = { moveSharedEntry(index, index + 1) }, enabled = index < snapshot.entries.lastIndex && !sharedBusy) { Text("↓") }
+                                                Spacer(Modifier.weight(1f))
+                                                TextButton(onClick = { removeSharedEntry(entry) }, enabled = !sharedBusy) { Text("Odebrat") }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (credentials.isHost && !snapshot?.entries.isNullOrEmpty()) {
+                            OutlinedButton(
+                                onClick = { playNextSharedEntry() },
+                                enabled = activeDevice != null && busyLabel == null && !sharedBusy &&
+                                    GroupQueueLogic.nextEntry(snapshot!!.entries, snapshot.currentEntryId) != null,
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Přehrát další položku") }
+                        }
+                    }
+                    sharedSyncError?.let {
+                        StatusMessage(it, true)
+                    }
+                    Text(
+                        "Poznámka: oba telefony i televize musí být ve stejné neizolované Wi-Fi síti. Hostitelská aplikace musí zůstat spuštěná. Přenos je pouze v místní síti a nepoužívá šifrování TLS.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
