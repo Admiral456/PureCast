@@ -77,6 +77,7 @@ class DlnaDiscovery(context: Context) {
         connection.connectTimeout = 4_000
         connection.readTimeout = 4_000
         connection.requestMethod = "GET"
+        connection.setRequestProperty("Accept-Encoding", "identity")
         return try {
             if (connection.responseCode !in 200..299) return null
             val factory = DocumentBuilderFactory.newInstance().apply {
@@ -86,7 +87,6 @@ class DlnaDiscovery(context: Context) {
                 isXIncludeAware = false
                 isExpandEntityReferences = false
             }
-            connection.setRequestProperty("Accept-Encoding", "identity")
             val document = connection.inputStream.use { factory.newDocumentBuilder().parse(it) }
             val allDevices = document.getElementsByTagName("device")
             var renderer: Element? = null
@@ -112,6 +112,10 @@ class DlnaDiscovery(context: Context) {
                 }
             }
             if (serviceType == null || controlPath == null) return null
+            val urlBaseText = document.getElementsByTagName("URLBase")
+                .item(0)?.textContent?.trim().orEmpty()
+            val controlBase = if (urlBaseText.isNotBlank()) URL(urlBaseText) else URL(location)
+            val resolvedControlUrl = URL(controlBase, controlPath).toExternalForm()
             DlnaDevice(
                 id = deviceElement.firstText("UDN").ifBlank { location },
                 friendlyName = deviceElement.firstText("friendlyName").ifBlank { "DLNA televizor" },
