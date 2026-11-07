@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -61,7 +62,6 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.size
 import com.admiral456.purecast.device.ReceiverBrandClassifier
 import com.admiral456.purecast.device.SenderDeviceInfo
 import com.admiral456.purecast.dlna.DlnaController
@@ -479,22 +479,46 @@ private fun PureCastScreen() {
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                             ) {
                                 Column(modifier = Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Row(
+                                        verticalAlignment = Alignment.Top,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
                                         MediaThumbnail(file)
-                                        Spacer(Modifier.width(10.dp))
-                                        Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), shape = RoundedCornerShape(11.dp)) {
+                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Surface(
+                                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                                    shape = RoundedCornerShape(11.dp)
+                                                ) {
+                                                    Text(
+                                                        if (file.isImage) "FOTO" else if (file.isVideo) "VIDEO" else "SOUBOR",
+                                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                                Spacer(Modifier.weight(1f))
+                                                TextButton(
+                                                    onClick = {
+                                                        selectedFiles.remove(file)
+                                                        technicalInfo.remove(file.uri.toString())
+                                                    },
+                                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                                ) { Text("Odebrat") }
+                                            }
                                             Text(
-                                                if (file.isImage) "FOTO" else if (file.isVideo) "VIDEO" else "SOUBOR",
-                                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 8.dp),
-                                                color = MaterialTheme.colorScheme.primary,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold
+                                                file.displayName,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
                                             )
-                                        }
-                                        Spacer(Modifier.width(10.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(file.displayName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                            Text("${file.mimeType}  ·  ${formatSize(file.sizeBytes)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(
+                                                "${file.mimeType}  ·  ${formatSize(file.sizeBytes)}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
                                             technicalInfo[file.uri.toString()]?.let { info ->
                                                 val technicalParts = listOfNotNull(
                                                     info.resolutionLabel(),
@@ -516,7 +540,6 @@ private fun PureCastScreen() {
                                                 }
                                             }
                                         }
-                                        TextButton(onClick = { selectedFiles.remove(file); technicalInfo.remove(file.uri.toString()) }) { Text("Odebrat") }
                                     }
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                                         Button(
