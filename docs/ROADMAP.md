@@ -9,14 +9,22 @@
 - [x] Czech light/dark UI.
 - [x] Photo Picker selection and URI permission retention where supported.
 - [x] SSDP discovery for UPnP MediaRenderer devices.
+- [x] Prefer active Wi-Fi route for SSDP requests and TV-description retrieval.
+- [x] Prefer an active Wi-Fi IPv4 address when creating TV playback links.
 - [x] Secure device-description XML parsing and optional URLBase resolution.
 - [x] AVTransport SetAVTransportURI, Play, Pause, Stop, Seek and state/position queries.
 - [x] ConnectionManager GetProtocolInfo and conservative MIME-profile compatibility evaluation.
 - [x] Original-source local HTTP streaming with byte-range support.
 - [x] TV browser fallback page with responsive controls and browser MIME support hint.
+- [x] Short, random, URL-safe media tokens for TV playback URLs.
 - [x] Foreground playback service and persistent playback notification.
 - [x] Image/video technical metadata inspection.
-- [x] Unit tests for byte ranges, UPnP time values, MIME compatibility and brand classification.
+- [x] Progressive metadata inspection and cancellation of stale gallery inspection work.
+- [x] Thumbnail previews for images and videos.
+- [x] Lazy gallery item rendering to limit simultaneous thumbnail decoding.
+- [x] Filename search and photo/video type filters.
+- [x] Memory-conscious thumbnail decoding for older Android versions.
+- [x] Unit tests for byte ranges, UPnP time values, MIME compatibility, media filters, media tokens and brand classification.
 - [x] GitHub Actions tests and debug APK build.
 
 ## Milestone 1 — Samsung and LG real-device interoperability
@@ -32,7 +40,8 @@
 ## Milestone 2 — multi-phone and library features
 
 - [x] Allow multiple Android phone brands to run the same APK.
-- [ ] Gallery with thumbnails, albums, sorting, search and multi-select.
+- [x] Gallery with image/video thumbnails, filename search and media-type filters.
+- [ ] Albums, date-based sorting and additional library organization.
 - [ ] Shared local group queue for multiple phones, with host/queue permissions.
 - [ ] Show sender identity for items submitted to a shared queue.
 - [ ] Improve per-device compatibility profiles from actual UPnP protocolInfo and test results.
@@ -40,8 +49,8 @@
 
 ## Milestone 3 — robust streaming and security
 
+- [x] Prefer Wi-Fi rather than mobile/VPN routes for TV discovery and local playback URLs when available.
 - [ ] Add large-file, slow-network and interrupted-transfer stress tests.
-- [ ] Add active network-interface selection for Wi-Fi/VPN/multiple network routes.
 - [ ] Add explicit media server access revocation and token refresh.
 - [ ] Validate all request paths, content ranges and response headers with integration tests.
 - [ ] Review LAN exposure and optionally bind to the active Wi-Fi interface rather than all interfaces.
