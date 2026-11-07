@@ -21,6 +21,11 @@ class RangeParserTest {
     }
 
     @Test
+    fun suffixLongerThanFileReturnsEntireFile() {
+        assertEquals(ByteRange(0, 99), RangeParser.parse("bytes=-500", 100))
+    }
+
+    @Test
     fun clipsRangeAtEndOfFile() {
         assertEquals(ByteRange(950, 999), RangeParser.parse("bytes=950-1200", 1_000))
     }
@@ -33,5 +38,20 @@ class RangeParserTest {
     @Test
     fun rejectsMultipleRanges() {
         assertNull(RangeParser.parse("bytes=0-1,10-11", 100))
+    }
+
+    @Test
+    fun rejectsEmptyRange() {
+        assertNull(RangeParser.parse("bytes=-", 100))
+    }
+
+    @Test
+    fun rejectsUnsupportedRangeUnit() {
+        assertNull(RangeParser.parse("items=0-10", 100))
+    }
+
+    @Test
+    fun rejectsZeroLengthResource() {
+        assertNull(RangeParser.parse("bytes=0-", 0))
     }
 }
