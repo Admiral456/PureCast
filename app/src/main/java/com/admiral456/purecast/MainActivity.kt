@@ -21,10 +21,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -473,111 +475,117 @@ private fun PureCastScreen() {
                     } else if (visibleFiles.isEmpty()) {
                         EmptyState("Nic nenalezeno", "Zkus upravit hledaný název nebo zvolit jiný filtr.")
                     } else {
-                        visibleFiles.forEach { file ->
-                            Card(
-                                shape = RoundedCornerShape(15.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                            ) {
-                                Column(modifier = Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Row(
-                                        verticalAlignment = Alignment.Top,
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 600.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(visibleFiles, key = { it.uri.toString() }) { file ->
+                                file ->
+                                    Card(
+                                        shape = RoundedCornerShape(15.dp),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                                     ) {
-                                        MediaThumbnail(file)
-                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Surface(
-                                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                                    shape = RoundedCornerShape(11.dp)
-                                                ) {
+                                        Column(modifier = Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Row(
+                                                verticalAlignment = Alignment.Top,
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                            ) {
+                                                MediaThumbnail(file)
+                                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Surface(
+                                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                                            shape = RoundedCornerShape(11.dp)
+                                                        ) {
+                                                            Text(
+                                                                if (file.isImage) "FOTO" else if (file.isVideo) "VIDEO" else "SOUBOR",
+                                                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+                                                                color = MaterialTheme.colorScheme.primary,
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                fontWeight = FontWeight.Bold
+                                                            )
+                                                        }
+                                                        Spacer(Modifier.weight(1f))
+                                                        TextButton(
+                                                            onClick = {
+                                                                selectedFiles.remove(file)
+                                                                technicalInfo.remove(file.uri.toString())
+                                                            },
+                                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                                        ) { Text("Odebrat") }
+                                                    }
                                                     Text(
-                                                        if (file.isImage) "FOTO" else if (file.isVideo) "VIDEO" else "SOUBOR",
-                                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
-                                                        color = MaterialTheme.colorScheme.primary,
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                }
-                                                Spacer(Modifier.weight(1f))
-                                                TextButton(
-                                                    onClick = {
-                                                        selectedFiles.remove(file)
-                                                        technicalInfo.remove(file.uri.toString())
-                                                    },
-                                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
-                                                ) { Text("Odebrat") }
-                                            }
-                                            Text(
-                                                file.displayName,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.SemiBold,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            Text(
-                                                "${file.mimeType}  ·  ${formatSize(file.sizeBytes)}",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            technicalInfo[file.uri.toString()]?.let { info ->
-                                                val technicalParts = listOfNotNull(
-                                                    info.resolutionLabel(),
-                                                    info.frameRate?.let { String.format(Locale.US, "%.2f FPS", it) },
-                                                    info.videoMimeType,
-                                                    info.audioMimeTypes.firstOrNull(),
-                                                    info.bitrateBitsPerSecond?.let(::formatBitrate),
-                                                    info.durationMillis?.let { "Délka " + formatPlaybackTime(it / 1_000L) },
-                                                    if (file.isVideo) "HDR " + (info.hdrLabel ?: "neověřeno") else null
-                                                )
-                                                if (technicalParts.isNotEmpty()) {
-                                                    Text(
-                                                        technicalParts.joinToString(" · "),
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.secondary,
+                                                        file.displayName,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.SemiBold,
                                                         maxLines = 2,
                                                         overflow = TextOverflow.Ellipsis
                                                     )
+                                                    Text(
+                                                        "${file.mimeType}  ·  ${formatSize(file.sizeBytes)}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                    technicalInfo[file.uri.toString()]?.let { info ->
+                                                        val technicalParts = listOfNotNull(
+                                                            info.resolutionLabel(),
+                                                            info.frameRate?.let { String.format(Locale.US, "%.2f FPS", it) },
+                                                            info.videoMimeType,
+                                                            info.audioMimeTypes.firstOrNull(),
+                                                            info.bitrateBitsPerSecond?.let(::formatBitrate),
+                                                            info.durationMillis?.let { "Délka " + formatPlaybackTime(it / 1_000L) },
+                                                            if (file.isVideo) "HDR " + (info.hdrLabel ?: "neověřeno") else null
+                                                        )
+                                                        if (technicalParts.isNotEmpty()) {
+                                                            Text(
+                                                                technicalParts.joinToString(" · "),
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = MaterialTheme.colorScheme.secondary,
+                                                                maxLines = 2,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                                Button(
+                                                    onClick = {
+                                                        val device = activeDevice
+                                                        if (device == null) {
+                                                            isError = true
+                                                            status = "Nejdříve vyber nebo vyhledej DLNA televizor."
+                                                        } else {
+                                                            playOn(device, file)
+                                                        }
+                                                    },
+                                                    enabled = activeDevice != null && busyLabel == null,
+                                                    modifier = Modifier.weight(1f),
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                                                ) {
+                                                    if (busyLabel == file.displayName) {
+                                                        CircularProgressIndicator(
+                                                            modifier = Modifier.width(17.dp).height(17.dp),
+                                                            strokeWidth = 2.dp,
+                                                            color = MaterialTheme.colorScheme.onPrimary
+                                                        )
+                                                        Spacer(Modifier.width(7.dp))
+                                                    }
+                                                    Text("DLNA")
+                                                }
+                                                OutlinedButton(
+                                                    onClick = { prepareBrowser(file) },
+                                                    enabled = busyLabel == null,
+                                                    modifier = Modifier.weight(1f),
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                                                ) {
+                                                    Text("Prohlížeč TV")
                                                 }
                                             }
                                         }
                                     }
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                        Button(
-                                            onClick = {
-                                                val device = activeDevice
-                                                if (device == null) {
-                                                    isError = true
-                                                    status = "Nejdříve vyber nebo vyhledej DLNA televizor."
-                                                } else {
-                                                    playOn(device, file)
-                                                }
-                                            },
-                                            enabled = activeDevice != null && busyLabel == null,
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(12.dp),
-                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
-                                        ) {
-                                            if (busyLabel == file.displayName) {
-                                                CircularProgressIndicator(
-                                                    modifier = Modifier.width(17.dp).height(17.dp),
-                                                    strokeWidth = 2.dp,
-                                                    color = MaterialTheme.colorScheme.onPrimary
-                                                )
-                                                Spacer(Modifier.width(7.dp))
-                                            }
-                                            Text("DLNA")
-                                        }
-                                        OutlinedButton(
-                                            onClick = { prepareBrowser(file) },
-                                            enabled = busyLabel == null,
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(12.dp),
-                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
-                                        ) {
-                                            Text("Prohlížeč TV")
-                                        }
-                                    }
-                                }
                             }
                         }
                     }
