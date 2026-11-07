@@ -1,12 +1,18 @@
 package com.admiral456.purecast
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,16 +21,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -33,13 +44,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.isSystemInDarkTheme
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.admiral456.purecast.dlna.DlnaController
 import com.admiral456.purecast.dlna.DlnaDevice
 import com.admiral456.purecast.dlna.DlnaDiscovery
+import com.admiral456.purecast.dlna.DlnaTransportInfo
 import com.admiral456.purecast.media.MediaFile
 import com.admiral456.purecast.server.LocalMediaServer
 import java.util.Locale
@@ -47,11 +65,33 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private val PureCastLight = lightColorScheme(
+    primary = Color(0xFF4059D6),
+    onPrimary = Color.White,
+    secondary = Color(0xFF007F78),
+    background = Color(0xFFF4F6FB),
+    surface = Color.White,
+    surfaceVariant = Color(0xFFE9EDF6),
+    onSurface = Color(0xFF182033),
+    onSurfaceVariant = Color(0xFF667085)
+)
+
+private val PureCastDark = darkColorScheme(
+    primary = Color(0xFFB8C4FF),
+    onPrimary = Color(0xFF17265C),
+    secondary = Color(0xFF78D8CD),
+    background = Color(0xFF0D1220),
+    surface = Color(0xFF171E2E),
+    surfaceVariant = Color(0xFF242D40),
+    onSurface = Color(0xFFF3F5FA),
+    onSurfaceVariant = Color(0xFFB0B9CA)
+)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
+            MaterialTheme(colorScheme = if (isSystemInDarkTheme()) PureCastDark else PureCastLight) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     PureCastScreen()
                 }
@@ -62,142 +102,220 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun PureCastScreen() {
-    val context = LocalContext.current.applicationContext
+    val context = LocalContext.current
+    val appContext = context.applicationContext
     val scope = rememberCoroutineScope()
-    val discovery = remember { DlnaDiscovery(context) }
+    val discovery = remember { DlnaDiscovery(appContext) }
     val controller = remember { DlnaController() }
-    val mediaServer = remember { LocalMediaServer(context) }
+    val mediaServer = remember { LocalMediaServer(appContext) }
 
     var devices by remember { mutableStateOf<List<DlnaDevice>>(emptyList()) }
+    var selectedDeviceId by remember { mutableStateOf<String?>(null) }
     val selectedFiles = remember { mutableStateListOf<MediaFile>() }
     var isScanning by remember { mutableStateOf(false) }
+    var busyLabel by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf("Připoj telefon a televizi ke stejné Wi-Fi síti.") }
+    var isError by remember { mutableStateOf(false) }
+    var playingDevice by remember { mutableStateOf<DlnaDevice?>(null) }
+    var playingFile by remember { mutableStateOf<MediaFile?>(null) }
+    var browserUrl by remember { mutableStateOf<String?>(null) }
+    var transportInfo by remember { mutableStateOf<DlnaTransportInfo?>(null) }
 
     DisposableEffect(mediaServer) {
         onDispose { mediaServer.close() }
     }
 
+    val activeDevice = devices.firstOrNull { it.id == selectedDeviceId }
     val mediaPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 20)
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 50)
     ) { uris ->
         if (uris.isNotEmpty()) {
+            uris.forEach { uri ->
+                try {
+                    appContext.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (_: SecurityException) {
+                    // Some picker implementations provide temporary grants only.
+                } catch (_: IllegalArgumentException) {
+                    // Some picker implementations do not offer persistable grants.
+                }
+            }
             scope.launch {
                 val files = withContext(Dispatchers.IO) {
-                    uris.mapNotNull { uri -> MediaFile.fromUri(context, uri) }
+                    uris.mapNotNull { uri -> MediaFile.fromUri(appContext, uri) }
                 }
                 selectedFiles.clear()
                 selectedFiles.addAll(files)
+                isError = files.isEmpty()
                 status = if (files.isEmpty()) {
                     "Vybrané soubory se nepodařilo načíst."
                 } else {
-                    "Vybráno souborů: " + files.size
+                    "Připraveno ${files.size} souborů. Vyber televizi a spusť přehrávání."
                 }
+            }
+        }
+    }
+
+    fun playOn(device: DlnaDevice, file: MediaFile) {
+        scope.launch {
+            busyLabel = file.displayName
+            isError = false
+            status = "Připravuji přímý přenos: ${file.displayName}"
+            try {
+                val streamUrl = withContext(Dispatchers.IO) { mediaServer.publish(file) }
+                controller.play(device, streamUrl, file)
+                playingDevice = device
+                playingFile = file
+                browserUrl = mediaServer.browserPlayerUrl(streamUrl)
+                transportInfo = null
+                status = "Příkaz k přehrání byl odeslán do ${device.friendlyName}."
+            } catch (error: Exception) {
+                isError = true
+                status = error.message ?: "Přehrávání se nepodařilo."
+            } finally {
+                busyLabel = null
+            }
+        }
+    }
+
+    fun runPlaybackAction(label: String, action: suspend (DlnaDevice) -> Unit) {
+        val device = playingDevice ?: return
+        scope.launch {
+            busyLabel = label
+            isError = false
+            try {
+                action(device)
+                status = label
+            } catch (error: Exception) {
+                isError = true
+                status = error.message ?: "Příkaz se nepodařil."
+            } finally {
+                busyLabel = null
             }
         }
     }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Column {
-                Text(
-                    text = "PureCast",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Přehrávání originálních souborů na televizi",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Brush.linearGradient(listOf(Color(0xFF192B63), Color(0xFF4059D6), Color(0xFF087F8C))))
+                    .padding(22.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(color = Color.White.copy(alpha = 0.16f), shape = CircleShape) {
+                            Text("PC", modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp), color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Text("PURECAST", color = Color.White.copy(alpha = 0.84f), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.weight(1f))
+                        Surface(color = Color.White.copy(alpha = 0.14f), shape = CircleShape) {
+                            Text("DIRECT PLAY", modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Text("Tvoje média.\nNa velké obrazovce.", color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Přenášej fotky a videa přes domácí Wi-Fi bez automatické komprese.",
+                        color = Color.White.copy(alpha = 0.86f),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        HeaderTag("Bez cloudu")
+                        HeaderTag("Bez převodu")
+                        HeaderTag("Lokální síť")
+                    }
+                }
             }
         }
 
         item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("1. Televize", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(8.dp))
+            SectionTitle("Televize", "Vyhledej DLNA přehrávače v domácí síti.")
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
                         onClick = {
                             scope.launch {
                                 isScanning = true
-                                status = "Vyhledávám DLNA televizory v místní síti…"
+                                isError = false
+                                status = "Prohledávám síť přes UPnP / SSDP…"
                                 try {
-                                    devices = discovery.discover()
-                                    status = if (devices.isEmpty()) {
-                                        "Nenašel jsem DLNA přehrávač. Zkontroluj stejnou Wi-Fi a to, zda TV nabízí DLNA renderer."
+                                    val found = discovery.discover()
+                                    devices = found
+                                    if (selectedDeviceId == null || found.none { it.id == selectedDeviceId }) {
+                                        selectedDeviceId = found.firstOrNull()?.id
+                                    }
+                                    status = if (found.isEmpty()) {
+                                        "Nenalezen žádný ovladatelný DLNA přehrávač. Zkus režim prohlížeče televize níže."
                                     } else {
-                                        "Nalezeno zařízení: " + devices.size
+                                        "Nalezeno ${found.size} kompatibilních přehrávačů."
                                     }
                                 } catch (error: Exception) {
-                                    status = "Vyhledávání selhalo: " + (error.message ?: error.javaClass.simpleName)
+                                    isError = true
+                                    status = error.message ?: "Vyhledávání televizí selhalo."
                                 } finally {
                                     isScanning = false
                                 }
                             }
                         },
                         enabled = !isScanning,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
                     ) {
                         if (isScanning) {
                             CircularProgressIndicator(
-                                modifier = Modifier.height(18.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                strokeWidth = 2.dp
+                                modifier = Modifier.width(18.dp).height(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
                             )
+                            Spacer(Modifier.width(10.dp))
+                            Text("Vyhledávám…")
                         } else {
                             Text("Vyhledat televizory")
                         }
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Text(status, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
 
-        item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("2. Fotky a videa", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = {
-                            mediaPicker.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Vybrat fotky a videa")
-                    }
-                    if (selectedFiles.isEmpty()) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Zatím nemáš vybraný žádný soubor.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    } else {
-                        Spacer(Modifier.height(8.dp))
-                        selectedFiles.forEachIndexed { index, file ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                    StatusMessage(text = status, error = isError)
+                    if (devices.isNotEmpty()) {
+                        devices.forEach { device ->
+                            val isSelected = device.id == selectedDeviceId
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.09f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                                )
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(file.displayName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                                    Text(
-                                        file.mimeType + " • " + formatSize(file.sizeBytes),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                TextButton(onClick = { selectedFiles.removeAt(index) }) {
-                                    Text("Odebrat")
+                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(device.friendlyName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                                            Text(
+                                                listOfNotNull(device.manufacturer, device.modelName).filter { it.isNotBlank() }.distinct().joinToString(" · ")
+                                                    .ifBlank { device.location.substringAfter("://").substringBefore('/') },
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        if (isSelected) {
+                                            StatusTag("Vybráno", MaterialTheme.colorScheme.primary)
+                                        } else {
+                                            TextButton(onClick = { selectedDeviceId = device.id }) { Text("Vybrat") }
+                                        }
+                                    }
+                                    Text("UPnP AVTransport · Direct Play", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                                 }
                             }
                         }
@@ -207,63 +325,157 @@ private fun PureCastScreen() {
         }
 
         item {
-            Text(
-                text = "3. Odeslání do televize",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-
-        if (devices.isEmpty()) {
-            item {
-                Text(
-                    "Nejdříve vyhledej kompatibilní DLNA televizor.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        } else {
-            items(devices, key = { it.id }) { device ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(device.friendlyName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        val detail = listOfNotNull(device.manufacturer, device.modelName)
-                            .filter { it.isNotBlank() }
-                            .distinct()
-                            .joinToString(" • ")
-                        if (detail.isNotBlank()) {
-                            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Text(
-                            "UPnP AVTransport",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Button(
-                            onClick = {
-                                val file = selectedFiles.firstOrNull()
-                                if (file == null) {
-                                    status = "Nejdříve vyber alespoň jednu fotografii nebo video."
-                                } else {
-                                    scope.launch {
-                                        status = "Připravuji přímé přehrávání…"
-                                        try {
-                                            val mediaUrl = withContext(Dispatchers.IO) {
-                                                mediaServer.publish(file)
-                                            }
-                                            controller.play(device, mediaUrl, file)
-                                            status = "Příkaz k přehrání byl odeslán. TV musí podporovat formát souboru."
-                                        } catch (error: Exception) {
-                                            status = "Přehrávání se nepodařilo: " + (error.message ?: error.javaClass.simpleName)
+            SectionTitle("Fotky a videa", "Vyber originální soubory z telefonu. PureCast je nebude převádět.")
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            mediaPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Text("＋  Vybrat fotky a videa")
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Vybrané soubory", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.weight(1f))
+                        StatusTag("${selectedFiles.size} / 50", MaterialTheme.colorScheme.secondary)
+                    }
+                    if (selectedFiles.isEmpty()) {
+                        EmptyState("Zatím tu nic není", "Vyber jednu nebo více fotek či videí a potom je odešli do televize.")
+                    } else {
+                        selectedFiles.forEach { file ->
+                            Card(
+                                shape = RoundedCornerShape(15.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            ) {
+                                Column(modifier = Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), shape = RoundedCornerShape(11.dp)) {
+                                            Text(
+                                                if (file.isImage) "FOTO" else if (file.isVideo) "VIDEO" else "SOUBOR",
+                                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 8.dp),
+                                                color = MaterialTheme.colorScheme.primary,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold
+                                            )
                                         }
+                                        Spacer(Modifier.width(10.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(file.displayName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text("${file.mimeType}  ·  ${formatSize(file.sizeBytes)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        TextButton(onClick = { selectedFiles.remove(file) }) { Text("Odebrat") }
+                                    }
+                                    Button(
+                                        onClick = {
+                                            val device = activeDevice
+                                            if (device == null) {
+                                                isError = true
+                                                status = "Nejdříve vyber nebo vyhledej televizor."
+                                            } else {
+                                                playOn(device, file)
+                                            }
+                                        },
+                                        enabled = activeDevice != null && busyLabel == null,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        if (busyLabel == file.displayName) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.width(17.dp).height(17.dp),
+                                                strokeWidth = 2.dp,
+                                                color = MaterialTheme.colorScheme.onPrimary
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                        }
+                                        Text("Přehrát v televizi")
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (playingDevice != null && playingFile != null) {
+            item {
+                SectionTitle("Přehrávání", "Ovládání se zobrazí, pokud jej televizor podporuje.")
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(playingFile?.displayName.orEmpty(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(playingDevice?.friendlyName.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { runPlaybackAction("Přehrávání pozastaveno.") { controller.pause(it) } },
+                                enabled = busyLabel == null,
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                            ) { Text("Pozastavit") }
+                            OutlinedButton(
+                                onClick = { runPlaybackAction("Pokračuji v přehrávání.") { controller.resume(it) } },
+                                enabled = busyLabel == null,
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                            ) { Text("Pokračovat") }
+                            OutlinedButton(
+                                onClick = {
+                                    runPlaybackAction("Přehrávání zastaveno.") {
+                                        controller.stop(it)
+                                        playingFile = null
+                                        browserUrl = null
+                                        transportInfo = null
+                                    }
+                                },
+                                enabled = busyLabel == null,
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                            ) { Text("Zastavit") }
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                runPlaybackAction("Stahuji stav z televize…") {
+                                    transportInfo = controller.getTransportInfo(it)
+                                    status = "Stav televize byl aktualizován."
+                                }
                             },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = selectedFiles.isNotEmpty()
-                        ) {
-                            Text("Přehrát první vybraný soubor")
+                            enabled = busyLabel == null,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Obnovit stav přehrávání") }
+                        transportInfo?.let {
+                            StatusMessage(
+                                text = "Stav: ${it.state.replace('_', ' ')} · ${it.status}",
+                                error = it.status != "OK" && it.status != "UNKNOWN"
+                            )
+                        }
+                        browserUrl?.let { url ->
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Záložní režim přes prohlížeč TV", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "Pokud DLNA ovládání televize nefunguje, otevři na televizi webový prohlížeč a zadej tuto adresu:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(url, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                OutlinedButton(
+                                    onClick = {
+                                        val clipboard = context.getSystemService(ClipboardManager::class.java)
+                                        clipboard?.setPrimaryClip(ClipData.newPlainText("PureCast TV přehrávač", url))
+                                        Toast.makeText(context, "Adresa zkopírována", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text("Zkopírovat adresu přehrávače") }
+                            }
                         }
                     }
                 }
@@ -271,19 +483,77 @@ private fun PureCastScreen() {
         }
 
         item {
-            Spacer(Modifier.height(2.dp))
-            Text(
-                "PureCast soubor nepřevádí. Pokud TV nepodporuje jeho kodek nebo kontejner, přehrávání může selhat místo automatického snížení kvality.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text("Původní kvalita je priorita", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "PureCast neposílá soubory přes cloud a nepřevádí je. Televizor ale musí sám podporovat daný formát, kodek, rozlišení, FPS a HDR. Když ho nepodporuje, aplikace kvalitu potichu nesníží.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun HeaderTag(text: String) {
+    Surface(color = Color.White.copy(alpha = 0.14f), shape = CircleShape) {
+        Text(text, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), color = Color.White, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun SectionTitle(title: String, subtitle: String) {
+    Column(modifier = Modifier.padding(start = 2.dp, bottom = 9.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        if (subtitle.isNotBlank()) {
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun StatusTag(text: String, color: Color) {
+    Surface(color = color.copy(alpha = 0.12f), shape = CircleShape) {
+        Text(text, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun StatusMessage(text: String, error: Boolean) {
+    val tint = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
+    Surface(color = tint.copy(alpha = 0.09f), shape = RoundedCornerShape(13.dp), modifier = Modifier.fillMaxWidth()) {
+        Text(text, modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall, color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+@Composable
+private fun EmptyState(title: String, body: String) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 private fun formatSize(bytes: Long?): String {
     if (bytes == null || bytes < 0L) return "Velikost neznámá"
-    if (bytes < 1024L) return bytes.toString() + " B"
-    val megabytes = bytes / (1024.0 * 1024.0)
-    return String.format(Locale.getDefault(), "%.1f MB", megabytes)
+    if (bytes < 1024L) return "$bytes B"
+    val units = listOf("KB", "MB", "GB", "TB")
+    var value = bytes / 1024.0
+    var unit = 0
+    while (value >= 1024.0 && unit < units.lastIndex) {
+        value /= 1024.0
+        unit++
+    }
+    return String.format(Locale.getDefault(), "%.1f %s", value, units[unit])
 }
