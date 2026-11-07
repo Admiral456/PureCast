@@ -253,7 +253,7 @@ private fun PureCastScreen() {
                                             val mediaUrl = withContext(Dispatchers.IO) {
                                                 mediaServer.publish(file)
                                             }
-                                            controller.play(device, mediaUrl)
+                                            controller.play(device, mediaUrl, file)
                                             status = "Příkaz k přehrání byl odeslán. TV musí podporovat formát souboru."
                                         } catch (error: Exception) {
                                             status = "Přehrávání se nepodařilo: " + (error.message ?: error.javaClass.simpleName)
