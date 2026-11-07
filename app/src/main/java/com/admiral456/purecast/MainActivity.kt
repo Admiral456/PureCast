@@ -173,7 +173,7 @@ private fun PureCastScreen() {
     var seekPreviewSeconds by remember { mutableStateOf(0f) }
 
     val activeDevice = devices.firstOrNull { it.id == selectedDeviceId }
-    DisposableEffect(Unit) {
+    DisposableEffect(groupServer) {
         onDispose { groupServer?.close() }
     }
 
