@@ -11,17 +11,25 @@ object MediaLibraryFilter {
         media: List<MediaFile>,
         query: String,
         kind: MediaKindFilter
-    ): List<MediaFile> {
+    ): List<MediaFile> = media.filter { file ->
+        matches(file.displayName, file.mimeType, query, kind)
+    }
+
+    fun matches(
+        displayName: String,
+        mimeType: String,
+        query: String,
+        kind: MediaKindFilter
+    ): Boolean {
         val normalizedQuery = query.trim().lowercase()
-        return media.filter { file ->
-            val matchesName = normalizedQuery.isEmpty() ||
-                file.displayName.lowercase().contains(normalizedQuery)
-            val matchesKind = when (kind) {
-                MediaKindFilter.ALL -> true
-                MediaKindFilter.PHOTOS -> file.isImage
-                MediaKindFilter.VIDEOS -> file.isVideo
-            }
-            matchesName && matchesKind
+        val matchesName = normalizedQuery.isEmpty() ||
+            displayName.lowercase().contains(normalizedQuery)
+        val normalizedMime = mimeType.lowercase()
+        val matchesKind = when (kind) {
+            MediaKindFilter.ALL -> true
+            MediaKindFilter.PHOTOS -> normalizedMime.startsWith("image/")
+            MediaKindFilter.VIDEOS -> normalizedMime.startsWith("video/")
         }
+        return matchesName && matchesKind
     }
 }
