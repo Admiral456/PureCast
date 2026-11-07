@@ -3,13 +3,13 @@ package com.admiral456.purecast.playback
 object PlaybackQueueLogic {
     fun nextIndex(currentIndex: Int, itemCount: Int): Int? {
         if (itemCount <= 0) return null
-        return if (currentIndex !in 0 until itemCount) 0 else (currentIndex + 1) % itemCount
+        if (currentIndex !in 0 until itemCount) return 0
+        return (currentIndex + 1).takeIf { it < itemCount }
     }
 
     fun previousIndex(currentIndex: Int, itemCount: Int): Int? {
-        if (itemCount <= 0) return null
-        return if (currentIndex !in 0 until itemCount) itemCount - 1
-        else (currentIndex - 1 + itemCount) % itemCount
+        if (itemCount <= 0 || currentIndex !in 0 until itemCount) return null
+        return (currentIndex - 1).takeIf { it >= 0 }
     }
 
     fun indexAfterRemoval(currentIndex: Int, removedIndex: Int, newItemCount: Int): Int {
