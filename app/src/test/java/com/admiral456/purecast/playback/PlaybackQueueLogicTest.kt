@@ -10,13 +10,23 @@ class PlaybackQueueLogicTest {
     }
 
     @Test
-    fun nextWrapsAtEnd() {
-        assertEquals(0, PlaybackQueueLogic.nextIndex(2, 3))
+    fun nextDoesNotWrapAfterLastItem() {
+        assertEquals(null, PlaybackQueueLogic.nextIndex(2, 3))
     }
 
     @Test
-    fun previousWrapsAtBeginning() {
-        assertEquals(2, PlaybackQueueLogic.previousIndex(0, 3))
+    fun nextMovesForwardWithinQueue() {
+        assertEquals(2, PlaybackQueueLogic.nextIndex(1, 3))
+    }
+
+    @Test
+    fun previousDoesNotWrapBeforeFirstItem() {
+        assertEquals(null, PlaybackQueueLogic.previousIndex(0, 3))
+    }
+
+    @Test
+    fun previousMovesBackWithinQueue() {
+        assertEquals(0, PlaybackQueueLogic.previousIndex(1, 3))
     }
 
     @Test
