@@ -27,6 +27,10 @@ object GroupQueueClient {
     fun getState(credentials: GroupQueueCredentials) =
         parseSnapshot(request(credentials.baseUrl, credentials.accessToken, "GET", "/v1/state", null))
 
+    fun leave(credentials: GroupQueueCredentials) {
+        request(credentials.baseUrl, credentials.accessToken, "POST", "/v1/leave", JSONObject())
+    }
+
     fun add(
         credentials: GroupQueueCredentials,
         title: String,
