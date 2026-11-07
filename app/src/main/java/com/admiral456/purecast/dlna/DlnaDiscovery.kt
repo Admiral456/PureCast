@@ -101,6 +101,8 @@ class DlnaDiscovery(context: Context) {
             val services = deviceElement.getElementsByTagName("service")
             var serviceType: String? = null
             var controlPath: String? = null
+            var connectionManagerType: String? = null
+            var connectionManagerPath: String? = null
             for (index in 0 until services.length) {
                 val service = services.item(index) as? Element ?: continue
                 val type = service.firstText("serviceType")
@@ -108,7 +110,9 @@ class DlnaDiscovery(context: Context) {
                 if (type.contains("AVTransport", ignoreCase = true) && control.isNotBlank()) {
                     serviceType = type
                     controlPath = control
-                    break
+                } else if (type.contains("ConnectionManager", ignoreCase = true) && control.isNotBlank()) {
+                    connectionManagerType = type
+                    connectionManagerPath = control
                 }
             }
             if (serviceType == null || controlPath == null) return null
@@ -116,6 +120,9 @@ class DlnaDiscovery(context: Context) {
                 .item(0)?.textContent?.trim().orEmpty()
             val controlBase = if (urlBaseText.isNotBlank()) URL(urlBaseText) else URL(location)
             val resolvedControlUrl = URL(controlBase, controlPath).toExternalForm()
+            val resolvedConnectionManagerUrl = connectionManagerPath?.let {
+                URL(controlBase, it).toExternalForm()
+            }
             DlnaDevice(
                 id = deviceElement.firstText("UDN").ifBlank { location },
                 friendlyName = deviceElement.firstText("friendlyName").ifBlank { "DLNA televizor" },
@@ -123,7 +130,9 @@ class DlnaDiscovery(context: Context) {
                 modelName = deviceElement.firstText("modelName").ifBlank { null },
                 location = location,
                 avTransportControlUrl = resolvedControlUrl,
-                serviceType = serviceType
+                serviceType = serviceType,
+                connectionManagerControlUrl = resolvedConnectionManagerUrl,
+                connectionManagerServiceType = connectionManagerType
             )
         } catch (_: Exception) {
             null
