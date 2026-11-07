@@ -1,47 +1,52 @@
 # PureCast roadmap
 
-## Milestone 0 — project foundation (current)
+## Milestone 0 — working Android foundation
 
-- [x] Android/Kotlin/Compose project structure.
-- [x] Media Picker integration.
+- [x] Kotlin/Jetpack Compose project and Czech light/dark UI.
+- [x] Photo Picker selection and URI permission retention where supported.
 - [x] SSDP discovery for UPnP MediaRenderer devices.
-- [x] UPnP AVTransport SetAVTransportURI + Play, including DIDL-Lite metadata.
-- [x] Local HTTP media endpoint.
-- [x] Single-range HTTP responses for seeking.
-- [x] Unit tests for range parsing.
-- [x] GitHub Actions debug build workflow.
-- [x] GitHub Actions CI: Kotlin compilation, unit tests, and debug APK build passed (run #6, 7 November 2026).
-- [ ] Test against the LG 55UJ7507 and at least one other DLNA renderer.
+- [x] Secure device-description XML parsing and optional URLBase resolution.
+- [x] AVTransport SetAVTransportURI, Play, Pause, Stop, Seek and state/position queries.
+- [x] ConnectionManager GetProtocolInfo and conservative MIME-profile compatibility evaluation.
+- [x] Original-source local HTTP streaming with byte-range support.
+- [x] TV browser fallback page served directly by the phone.
+- [x] Foreground playback service and persistent playback notification.
+- [x] Image/video technical metadata inspection.
+- [x] Unit tests for byte ranges, UPnP time values and MIME compatibility.
+- [x] GitHub Actions tests and debug APK build.
 
-## Milestone 1 — playback reliability
+## Milestone 1 — real-device interoperability
 
-- Add a foreground playback service so streaming continues reliably while PureCast is backgrounded.
-- Add explicit stop, pause, resume, and seek controls through AVTransport.
-- Retain and revoke URI grants safely when the user reopens the app.
-- Improve timeout, socket, and TV SOAP fault diagnostics.
-- Handle TV/phone Wi-Fi changes and recover the local server.
+- [ ] Test discovery and playback on the LG 55UJ7507.
+- [ ] Capture actual SSDP replies and UPnP service descriptions from LG firmware.
+- [ ] Verify which photo formats the LG browser and/or DLNA renderer accepts.
+- [ ] Test H.264/AAC MP4 and supported image formats first, then test selected high-resolution files.
+- [ ] Verify pause, seek, stop and background streaming on physical hardware.
+- [ ] Add device-specific workarounds only when supported by captured device responses.
 
-## Milestone 2 — media browser and compatibility
+## Milestone 2 — richer library and diagnostics
 
-- Build a gallery with albums, thumbnails, sorting, and multi-select.
-- Read media metadata: resolution, frame rate, video/audio codecs, bitrate, HDR, duration, and file size.
-- Show compatibility as Direct Play, incompatible, or unknown. Never label an unverified file as compatible.
-- Add support profiles and tests for LG webOS, Samsung Tizen, Android TV/Google TV, and other DLNA renderers.
+- [ ] Gallery with thumbnails, albums, sorting, search and multi-select.
+- [ ] Display full technical details and keep unknown values distinct from unsupported values.
+- [ ] Add per-TV capability profiles based on actual UPnP protocolInfo and tested formats.
+- [ ] Improve friendly error explanations for Wi-Fi isolation, unsupported format and expired file URI access.
+- [ ] Add optional manual IP/URL connection for TV browser fallback.
 
-## Milestone 3 — robustness and security
+## Milestone 3 — robust streaming and security
 
-- Add an expiring capability token per stream and verify request methods and paths strictly.
-- Add IPv4/IPv6 and network-interface selection for phones with VPNs or multiple network routes.
-- Add single- and multi-range test coverage, large-file stress tests, and interrupted-transfer recovery.
-- Review cleartext LAN transport and ensure the media endpoint is reachable only on the active private network.
-- Before targeting Android API 37, declare and request ACCESS_LOCAL_NETWORK.
+- [ ] Add large-file, slow-network and interrupted-transfer stress tests.
+- [ ] Add active network-interface selection for Wi-Fi/VPN/multiple network routes.
+- [ ] Add explicit media server access revocation and token refresh.
+- [ ] Validate all request paths, content ranges and response headers with integration tests.
+- [ ] Review LAN exposure and optionally bind to the active Wi-Fi interface rather than all interfaces.
+- [ ] Before targeting Android API 37, declare and request ACCESS_LOCAL_NETWORK.
 
 ## Release acceptance checks
 
-1. Discovery finds a DLNA MediaRenderer on the same Wi-Fi.
-2. Device description is parsed with external XML entities disabled.
-3. A selected file is served byte-for-byte; no transcoder is present in the pipeline.
-4. HEAD and GET requests return correct MIME type and length where known.
-5. Range requests return 206 with a valid Content-Range.
-6. TV reports unsupported formats visibly; PureCast does not silently transcode.
-7. The app remains stable for large files and long playback sessions.
+1. A TV renderer is discovered on the same local network, or the user receives an actionable explanation.
+2. A selected media file is served byte-for-byte; no transcoder is present in the pipeline.
+3. HEAD and GET requests return correct MIME type and length where known.
+4. Range requests return 206 with a valid Content-Range.
+5. Unsupported formats fail visibly rather than silently lowering quality.
+6. Streaming continues while the app is backgrounded with its foreground service active.
+7. Device-specific support claims are backed by tests on the actual TV model.
