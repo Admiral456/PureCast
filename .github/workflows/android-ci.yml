@@ -39,41 +39,35 @@ jobs:
       - name: Run unit tests and build all installable APK variants
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:assembleUnminified
 
-      - name: Verify critical features survive APK packaging
+      - name: Verify optimized and full release packages
         run: |
           python scripts/verify_apk.py app/build/outputs/apk/release/app-release.apk
           python scripts/verify_apk.py app/build/outputs/apk/unminified/app-unminified.apk
 
-      - name: Report APK sizes
+      - name: Prepare one user-facing PureCast APK
         run: |
-          stat --printf="Debug APK: %s bytes\\n" app/build/outputs/apk/debug/app-debug.apk
-          stat --printf="Optimized release APK: %s bytes\\n" app/build/outputs/apk/release/app-release.apk
-          stat --printf="Unminified release APK: %s bytes\\n" app/build/outputs/apk/unminified/app-unminified.apk
+          cp app/build/outputs/apk/unminified/app-unminified.apk app/build/outputs/apk/PureCast.apk
+          python scripts/verify_apk.py app/build/outputs/apk/PureCast.apk
+          sha256sum app/build/outputs/apk/PureCast.apk | tee app/build/outputs/apk/PureCast.apk.sha256
 
-      - name: Upload debug APK
+      - name: Report internal APK size comparison
+        run: |
+          DEBUG_SIZE=$(stat -c %s app/build/outputs/apk/debug/app-debug.apk)
+          OPTIMIZED_SIZE=$(stat -c %s app/build/outputs/apk/release/app-release.apk)
+          FULL_SIZE=$(stat -c %s app/build/outputs/apk/PureCast.apk)
+          {
+            echo "## PureCast 0.9.0 package verification"
+            echo ""
+            echo "| Build | Size |"
+            echo "|---|---:|"
+            echo "| Debug (internal only) | $DEBUG_SIZE bytes |"
+            echo "| R8 optimized (internal comparison) | $OPTIMIZED_SIZE bytes |"
+            echo "| **PureCast.apk (only published APK)** | **$FULL_SIZE bytes** |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload one standalone PureCast APK
         uses: actions/upload-artifact@v7
         with:
-          name: PureCast-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-
-      - name: Upload optimized release APK
-        uses: actions/upload-artifact@v7
-        with:
-          name: PureCast-release-apk
-          path: app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: error
-
-      - name: Upload unminified full-size release APK
-        uses: actions/upload-artifact@v7
-        with:
-          name: PureCast-full-apk
-          path: app/build/outputs/apk/unminified/app-unminified.apk
-          if-no-files-found: error
-
-      - name: Upload R8 shrink report
-        uses: actions/upload-artifact@v7
-        with:
-          name: PureCast-r8-audit
-          path: app/build/outputs/mapping/release/
+          name: PureCast-Android
+          path: app/build/outputs/apk/PureCast.apk
           if-no-files-found: error
