@@ -70,6 +70,16 @@ class LocalMediaServer(private val context: Context) : Closeable {
             serverSocket?.close()
         } catch (_: Exception) {
         }
+        if (boundAddress != null && boundAddress != address) {
+            clientSockets.forEach { client ->
+                try {
+                    client.close()
+                } catch (_: Exception) {
+                }
+            }
+            clientSockets.clear()
+            mediaByToken.clear()
+        }
         val socket = ServerSocket()
         socket.reuseAddress = true
         socket.bind(InetSocketAddress(address, 0))
