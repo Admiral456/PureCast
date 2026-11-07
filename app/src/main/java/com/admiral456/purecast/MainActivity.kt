@@ -167,6 +167,8 @@ private fun PureCastScreen() {
     var isError by remember { mutableStateOf(false) }
     var playingDevice by remember { mutableStateOf<DlnaDevice?>(null) }
     var playingFile by remember { mutableStateOf<MediaFile?>(null) }
+    var playingTitle by remember { mutableStateOf<String?>(null) }
+    var playingSharedEntryId by remember { mutableStateOf<String?>(null) }
     var browserUrl by remember { mutableStateOf<String?>(null) }
     var transportInfo by remember { mutableStateOf<DlnaTransportInfo?>(null) }
     var positionInfo by remember { mutableStateOf<DlnaPositionInfo?>(null) }
@@ -272,6 +274,8 @@ private fun PureCastScreen() {
                 }
                 playingDevice = device
                 playingFile = file
+                playingTitle = file.displayName
+                playingSharedEntryId = null
                 browserUrl = PureCastRuntime.getMediaServer(appContext).browserPlayerUrl(streamUrl)
                 transportInfo = null
                 positionInfo = null
@@ -280,6 +284,9 @@ private fun PureCastScreen() {
                 status = "Příkaz k přehrání byl odeslán do ${device.friendlyName}. " + compatibilityNote
             } catch (error: Exception) {
                 playingDevice = null
+                playingFile = null
+                playingTitle = null
+                playingSharedEntryId = null
                 isError = true
                 status = (error.message ?: "Přehrávání se nepodařilo.") +
                     " " + compatibilityNote + " Můžeš zkusit přehrávač v prohlížeči televize níže."
@@ -371,6 +378,8 @@ private fun PureCastScreen() {
                 browserUrl = PureCastRuntime.getMediaServer(appContext).browserPlayerUrl(streamUrl)
                 playingDevice = null
                 playingFile = file
+                playingTitle = file.displayName
+                playingSharedEntryId = null
                 transportInfo = null
                 status = "Odkaz pro TV prohlížeč je připraven. Otevři jej přímo na televizi."
             } catch (error: Exception) {
@@ -395,6 +404,7 @@ private fun PureCastScreen() {
                     ).also { it.start() }
                 }
                 groupServer = server
+                PureCastPlaybackService.start(appContext)
                 val credentials = server.hostCredentials()
                 sharedCredentials = credentials
                 sharedSnapshot = server.snapshot()
@@ -496,6 +506,7 @@ private fun PureCastScreen() {
             busyLabel = entry.title
             isError = false
             try {
+                PureCastPlaybackService.start(appContext)
                 controller.play(device, entry.mediaUrl, entry.title, entry.mimeType)
                 val latest = withContext(Dispatchers.IO) {
                     GroupQueueClient.setCurrent(credentials, entry.id)
@@ -503,6 +514,8 @@ private fun PureCastScreen() {
                 sharedSnapshot = latest
                 playingDevice = device
                 playingFile = null
+                playingTitle = entry.title
+                playingSharedEntryId = entry.id
                 browserUrl = null
                 status = "Do televize byl odeslán originální soubor „${entry.title}“ od ${entry.senderName}."
             } catch (error: Exception) {
@@ -1180,7 +1193,7 @@ private fun PureCastScreen() {
             }
         }
 
-        if (playingFile != null) {
+        if (playingTitle != null) {
             item {
                 SectionTitle("Přehrávání", "Vyber režim přehrávání podle možností své televize.")
                 Card(
@@ -1189,9 +1202,29 @@ private fun PureCastScreen() {
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(playingFile?.displayName.orEmpty(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(playingTitle.orEmpty(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(playingDevice?.friendlyName ?: "Režim prohlížeče televize", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (playingDevice != null) {
+                        if (playingSharedEntryId != null) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(
+                                    onClick = { playPreviousSharedEntry() },
+                                    enabled = busyLabel == null && sharedSnapshot?.let {
+                                        GroupQueueLogic.previousEntry(it.entries, playingSharedEntryId) != null
+                                    } == true,
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                                ) { Text("Předchozí ve sdílené frontě") }
+                                OutlinedButton(
+                                    onClick = { playNextSharedEntry() },
+                                    enabled = busyLabel == null && sharedSnapshot?.let {
+                                        GroupQueueLogic.nextEntry(it.entries, playingSharedEntryId) != null
+                                    } == true,
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                                ) { Text("Další ve sdílené frontě") }
+                            }
+                        } else {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
                                 onClick = { playPreviousQueueItem() },
@@ -1205,6 +1238,7 @@ private fun PureCastScreen() {
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                             ) { Text("Další") }
+                        }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
@@ -1225,6 +1259,9 @@ private fun PureCastScreen() {
                                         controller.stop(it)
                                         PureCastPlaybackService.stop(appContext)
                                         playingFile = null
+                                        playingTitle = null
+                                        playingSharedEntryId = null
+                                        playingDevice = null
                                         browserUrl = null
                                         transportInfo = null
                                         positionInfo = null
@@ -1288,6 +1325,9 @@ private fun PureCastScreen() {
                                 onClick = {
                                     PureCastPlaybackService.stop(appContext)
                                     playingFile = null
+                                    playingTitle = null
+                                    playingSharedEntryId = null
+                                    playingDevice = null
                                     browserUrl = null
                                     transportInfo = null
                                     positionInfo = null
