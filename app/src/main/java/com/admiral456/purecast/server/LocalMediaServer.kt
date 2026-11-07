@@ -15,9 +15,13 @@ import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadFactory
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 private data class PublishedMedia(
     val media: MediaFile,
@@ -26,18 +30,30 @@ private data class PublishedMedia(
 
 class LocalMediaServer(private val context: Context) : Closeable {
     private val mediaByToken = ConcurrentHashMap<String, PublishedMedia>()
-    private val clientExecutor: ExecutorService = Executors.newCachedThreadPool()
+    private val clientSockets = ConcurrentHashMap.newKeySet<Socket>()
+    private val clientExecutor: ExecutorService = ThreadPoolExecutor(
+        MIN_CLIENT_THREADS,
+        MAX_CLIENT_THREADS,
+        CLIENT_KEEP_ALIVE_SECONDS,
+        TimeUnit.SECONDS,
+        ArrayBlockingQueue(MAX_QUEUED_CLIENTS),
+        ThreadFactory { task ->
+            Thread(task, "PureCast-HTTP-client").apply { isDaemon = true }
+        },
+        ThreadPoolExecutor.AbortPolicy()
+    )
     @Volatile private var serverSocket: ServerSocket? = null
     @Volatile private var acceptThread: Thread? = null
+    @Volatile private var boundAddress: Inet4Address? = null
 
     @Synchronized
     fun publish(media: MediaFile): String {
-        val server = ensureServer()
+        val address = findLocalIpv4()
+            ?: throw IllegalStateException("Telefon není připojený k použitelné místní IPv4 síti.")
+        val server = ensureServer(address)
         val token = MediaTokenGenerator.create()
         mediaByToken[token] = PublishedMedia(media, System.currentTimeMillis() + TOKEN_LIFETIME_MS)
         pruneExpiredTokens()
-        val address = findLocalIpv4()
-            ?: throw IllegalStateException("Nepodařilo se zjistit IPv4 adresu Wi-Fi.")
         return "http://" + address.hostAddress + ":" + server.localPort + "/media/" + token
     }
 
@@ -48,12 +64,17 @@ class LocalMediaServer(private val context: Context) : Closeable {
     }
 
     @Synchronized
-    private fun ensureServer(): ServerSocket {
-        serverSocket?.takeIf { !it.isClosed }?.let { return it }
+    private fun ensureServer(address: Inet4Address): ServerSocket {
+        serverSocket?.takeIf { !it.isClosed && boundAddress == address }?.let { return it }
+        try {
+            serverSocket?.close()
+        } catch (_: Exception) {
+        }
         val socket = ServerSocket()
         socket.reuseAddress = true
-        socket.bind(InetSocketAddress("0.0.0.0", 0))
+        socket.bind(InetSocketAddress(address, 0))
         serverSocket = socket
+        boundAddress = address
         acceptThread = Thread({ acceptLoop(socket) }, "PureCast-HTTP").apply {
             isDaemon = true
             start()
@@ -65,7 +86,27 @@ class LocalMediaServer(private val context: Context) : Closeable {
         while (!server.isClosed) {
             try {
                 val client = server.accept()
-                clientExecutor.execute { handleClient(client) }
+                clientSockets.add(client)
+                try {
+                    clientExecutor.execute {
+                        try {
+                            handleClient(client)
+                        } finally {
+                            clientSockets.remove(client)
+                        }
+                    }
+                } catch (_: RejectedExecutionException) {
+                    clientSockets.remove(client)
+                    try {
+                        writeSimpleResponse(client, 503, "Server Busy")
+                    } catch (_: Exception) {
+                    } finally {
+                        try {
+                            client.close()
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
             } catch (_: Exception) {
                 if (!server.isClosed) continue
                 return
@@ -392,13 +433,25 @@ class LocalMediaServer(private val context: Context) : Closeable {
         }
         serverSocket = null
         acceptThread = null
+        boundAddress = null
         mediaByToken.clear()
+        clientSockets.forEach { client ->
+            try {
+                client.close()
+            } catch (_: Exception) {
+            }
+        }
+        clientSockets.clear()
         clientExecutor.shutdownNow()
     }
 
     companion object {
         private const val MAX_HEADER_BYTES = 16_384
         private const val BUFFER_SIZE = 64 * 1024
+        private const val MIN_CLIENT_THREADS = 2
+        private const val MAX_CLIENT_THREADS = 8
+        private const val MAX_QUEUED_CLIENTS = 32
+        private const val CLIENT_KEEP_ALIVE_SECONDS = 30L
         private const val TOKEN_LIFETIME_MS = 6 * 60 * 60 * 1_000L
         private val MEDIA_PATH = Regex("^/(media|tv)/([A-Za-z0-9_-]{12})$")
     }
