@@ -53,7 +53,7 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
             ?: throw IllegalStateException("Telefon není připojený k použitelné Wi-Fi IPv4 síti.")
         val socket = ServerSocket()
         socket.reuseAddress = true
-        socket.bind(InetSocketAddress("0.0.0.0", 0))
+        socket.bind(InetSocketAddress(ip, 0))
         serverSocket = socket
         baseUrl = "http://${ip.hostAddress}:${socket.localPort}"
         Thread({
