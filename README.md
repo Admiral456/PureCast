@@ -76,7 +76,7 @@ The latest successful build is available from [GitHub Actions artifacts](https:/
 
 ## Why the optimized APK is small
 
-PureCast does not bundle a video transcoder, codec framework, sample photos, sample videos, downloaded media or large image assets. It serves original files from Android content URIs and asks the TV to decode them. The release APK is therefore mostly app code and a small resource table. R8 removes unused parts of the AndroidX/Compose dependency graph; the full-size unminified release is available as a separate artifact to compare packaging without that shrink step. CI verifies critical feature markers in both release APKs and publishes the R8 report. A small APK is not proof of missing functionality, and adding dummy files to increase its size would not make the app more complete.
+PureCast does not bundle a video transcoder, codec framework, sample photos, sample videos, downloaded media or large image assets. It serves original files from Android content URIs and asks the TV to decode them. The release APK is therefore mostly app code and a small resource table. R8 removes unused parts of the AndroidX/Compose dependency graph; the unminified release is used for the single user-facing APK while R8 remains an internal comparison. CI verifies critical feature markers in both release packages. A small APK is not proof of missing functionality, and adding dummy files to increase its size would not make the app more complete.
 
 ## Quality and compatibility notes
 
