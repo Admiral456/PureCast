@@ -173,7 +173,7 @@ private fun PureCastScreen() {
     var seekPreviewSeconds by remember { mutableStateOf(0f) }
 
     val activeDevice = devices.firstOrNull { it.id == selectedDeviceId }
-    DisposableEffect(groupServer) {
+    DisposableEffect(Unit) {
         onDispose { groupServer?.close() }
     }
 
@@ -1137,7 +1137,7 @@ private fun PureCastScreen() {
                             OutlinedButton(
                                 onClick = { playNextSharedEntry() },
                                 enabled = activeDevice != null && busyLabel == null && !sharedBusy &&
-                                    GroupQueueLogic.nextEntry(snapshot!!.entries, snapshot.currentEntryId) != null,
+                                    GroupQueueLogic.nextEntry(snapshot!!.entries, snapshot!!.currentEntryId) != null,
                                 modifier = Modifier.fillMaxWidth()
                             ) { Text("Přehrát další položku") }
                         }
