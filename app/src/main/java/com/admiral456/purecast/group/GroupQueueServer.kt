@@ -167,6 +167,8 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
         when {
             request.method == "GET" && request.path == "/v1/state" ->
                 respond(socket, 200, snapshotJson(snapshot()))
+            request.method == "POST" && request.path == "/v1/leave" ->
+                leave(socket, participantId, token)
             request.method == "POST" && request.path == "/v1/queue/add" ->
                 add(socket, request, participantId)
             request.method == "POST" && request.path == "/v1/queue/remove" ->
@@ -204,6 +206,22 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
             .put("displayName", name)
             .put("isHost", false)
             .put("snapshot", snapshotJson(snapshot())))
+    }
+
+    private fun leave(socket: Socket, participantId: String, token: String) {
+        if (isHost(participantId)) {
+            respond(socket, 403, error("Hostitel ukončuje skupinu zavřením relace."))
+            return
+        }
+        synchronized(lock) {
+            participants.remove(participantId)
+            tokens.remove(token)
+            val removedIds = entries.filter { it.senderParticipantId == participantId }.map { it.id }.toSet()
+            entries.removeAll { it.senderParticipantId == participantId }
+            if (currentEntryId in removedIds) currentEntryId = null
+            revision++
+        }
+        respond(socket, 200, JSONObject().put("left", true))
     }
 
     private fun add(socket: Socket, request: Request, participantId: String) {
