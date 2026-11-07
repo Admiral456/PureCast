@@ -3,19 +3,52 @@ package com.admiral456.purecast.dlna
 import com.admiral456.purecast.media.MediaFile
 import java.net.HttpURLConnection
 import java.net.URL
+import javax.xml.parsers.DocumentBuilderFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+data class DlnaTransportInfo(val state: String, val status: String)
 
 class DlnaController {
     suspend fun play(device: DlnaDevice, mediaUrl: String, media: MediaFile) = withContext(Dispatchers.IO) {
         val didl = didlMetadata(media, mediaUrl)
-        postAction(
-            device,
-            "SetAVTransportURI",
-            "<InstanceID>0</InstanceID><CurrentURI>" + xmlEscape(mediaUrl) +
-                "</CurrentURI><CurrentURIMetaData>" + xmlEscape(didl) + "</CurrentURIMetaData>"
-        )
+        postAction(device, "SetAVTransportURI",
+            "<InstanceID>0</InstanceID><CurrentURI>${xmlEscape(mediaUrl)}</CurrentURI>" +
+            "<CurrentURIMetaData>${xmlEscape(didl)}</CurrentURIMetaData>")
         postAction(device, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>")
+    }
+
+    suspend fun resume(device: DlnaDevice) = withContext(Dispatchers.IO) {
+        postAction(device, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>")
+    }
+
+    suspend fun pause(device: DlnaDevice) = withContext(Dispatchers.IO) {
+        postAction(device, "Pause", "<InstanceID>0</InstanceID>")
+    }
+
+    suspend fun stop(device: DlnaDevice) = withContext(Dispatchers.IO) {
+        postAction(device, "Stop", "<InstanceID>0</InstanceID>")
+    }
+
+    suspend fun seekToSeconds(device: DlnaDevice, seconds: Long) = withContext(Dispatchers.IO) {
+        require(seconds >= 0L) { "Čas přehrávání nesmí být záporný." }
+        val hours = seconds / 3_600L
+        val minutes = (seconds % 3_600L) / 60L
+        val remainingSeconds = seconds % 60L
+        val target = "%02d:%02d:%02d".format(hours, minutes, remainingSeconds)
+        postAction(device, "Seek",
+            "<InstanceID>0</InstanceID><Unit>REL_TIME</Unit><Target>$target</Target>")
+    }
+
+    suspend fun getTransportInfo(device: DlnaDevice): DlnaTransportInfo = withContext(Dispatchers.IO) {
+        val response = postAction(device, "GetTransportInfo", "<InstanceID>0</InstanceID>")
+        val factory = secureDocumentFactory()
+        val document = factory.newDocumentBuilder().parse(response.byteInputStream(Charsets.UTF_8))
+        val state = document.getElementsByTagName("CurrentTransportState")
+            .item(0)?.textContent?.trim().orEmpty().ifBlank { "UNKNOWN" }
+        val status = document.getElementsByTagName("CurrentTransportStatus")
+            .item(0)?.textContent?.trim().orEmpty().ifBlank { "UNKNOWN" }
+        DlnaTransportInfo(state, status)
     }
 
     private fun didlMetadata(media: MediaFile, mediaUrl: String): String {
@@ -28,20 +61,20 @@ class DlnaController {
             "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" " +
             "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\">" +
             "<item id=\"0\" parentID=\"-1\" restricted=\"1\">" +
-            "<dc:title>" + xmlEscape(media.displayName) + "</dc:title>" +
-            "<upnp:class>" + upnpClass + "</upnp:class>" +
-            "<res protocolInfo=\"http-get:*:" + xmlEscape(media.mimeType) + ":*\">" +
-            xmlEscape(mediaUrl) + "</res></item></DIDL-Lite>"
+            "<dc:title>${xmlEscape(media.displayName)}</dc:title>" +
+            "<upnp:class>$upnpClass</upnp:class>" +
+            "<res protocolInfo=\"http-get:*:${xmlEscape(media.mimeType)}:DLNA.ORG_OP=01;DLNA.ORG_CI=0\">" +
+            "${xmlEscape(mediaUrl)}</res></item></DIDL-Lite>"
     }
 
-    private fun postAction(device: DlnaDevice, action: String, body: String) {
+    private fun postAction(device: DlnaDevice, action: String, body: String): String {
         val serviceType = device.serviceType
         val envelope =
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
-                "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" " +
-                "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">" +
-                "<s:Body><u:" + action + " xmlns:u=\"" + xmlEscape(serviceType) + "\">" +
-                body + "</u:" + action + "></s:Body></s:Envelope>"
+            "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" " +
+            "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">" +
+            "<s:Body><u:$action xmlns:u=\"${xmlEscape(serviceType)}\">" +
+            "$body</u:$action></s:Body></s:Envelope>"
 
         val connection = URL(device.avTransportControlUrl).openConnection() as HttpURLConnection
         try {
@@ -50,27 +83,38 @@ class DlnaController {
             connection.requestMethod = "POST"
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "text/xml; charset=\"utf-8\"")
-            connection.setRequestProperty("SOAPACTION", "\""+ serviceType + "#" + action + "\"")
-            connection.outputStream.use { output ->
-                output.write(envelope.toByteArray(Charsets.UTF_8))
-            }
+            connection.setRequestProperty("SOAPACTION", "\"$serviceType#$action\"")
+            connection.outputStream.use { it.write(envelope.toByteArray(Charsets.UTF_8)) }
             val code = connection.responseCode
+            val response = if (code in 200..299) {
+                connection.inputStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            } else {
+                connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            }
             if (code !in 200..299) {
-                val error = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                val fault = response.replace(Regex("<[^>]+>"), " ")
+                    .replace(Regex("\\s+"), " ").trim()
                 throw IllegalStateException(
-                    "Televize odmítla příkaz " + action + " (HTTP " + code + "). " + error.take(240)
+                    "Televize odmítla příkaz $action (HTTP $code)." +
+                        if (fault.isBlank()) "" else " " + fault.take(240)
                 )
             }
-            connection.inputStream?.close()
+            return response
         } finally {
             connection.disconnect()
         }
     }
 
+    private fun secureDocumentFactory(): DocumentBuilderFactory =
+        DocumentBuilderFactory.newInstance().apply {
+            setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+            setFeature("http://xml.org/sax/features/external-general-entities", false)
+            setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+            isXIncludeAware = false
+            isExpandEntityReferences = false
+        }
+
     private fun xmlEscape(value: String): String =
-        value.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace("\"", "&quot;")
-            .replace("'", "&apos;")
+        value.replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
 }
