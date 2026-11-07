@@ -165,15 +165,17 @@ private fun PureCastScreen() {
             status = "Připravuji přímý přenos: ${file.displayName}"
             try {
                 val streamUrl = withContext(Dispatchers.IO) { mediaServer.publish(file) }
-                controller.play(device, streamUrl, file)
                 playingDevice = device
                 playingFile = file
                 browserUrl = mediaServer.browserPlayerUrl(streamUrl)
                 transportInfo = null
+                controller.play(device, streamUrl, file)
                 status = "Příkaz k přehrání byl odeslán do ${device.friendlyName}."
             } catch (error: Exception) {
+                playingDevice = null
                 isError = true
-                status = error.message ?: "Přehrávání se nepodařilo."
+                status = (error.message ?: "Přehrávání se nepodařilo.") +
+                    " Můžeš zkusit přehrávač v prohlížeči televize níže."
             } finally {
                 busyLabel = null
             }
