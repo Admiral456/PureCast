@@ -579,6 +579,22 @@ private fun PureCastScreen() {
                                 )
                             }
                         }
+                        } else {
+                            OutlinedButton(
+                                onClick = {
+                                    PureCastPlaybackService.stop(appContext)
+                                    playingFile = null
+                                    browserUrl = null
+                                    transportInfo = null
+                                    positionInfo = null
+                                    status = "Přenos ukončen."
+                                    isError = false
+                                },
+                                enabled = busyLabel == null,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Ukončit přenos")
+                            }
                         }
                         browserUrl?.let { url ->
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
