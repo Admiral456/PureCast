@@ -50,7 +50,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.isSystemInDarkTheme
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -491,7 +491,6 @@ private fun PureCastScreen() {
                                 text = "Stav: ${it.state.replace('_', ' ')} · ${it.status}",
                                 error = it.status != "OK" && it.status != "UNKNOWN"
                             )
-                        }
                         }
                         }
                         browserUrl?.let { url ->
