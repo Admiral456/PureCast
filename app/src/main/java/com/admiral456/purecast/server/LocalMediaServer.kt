@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Uri
 import com.admiral456.purecast.media.MediaFile
+import com.admiral456.purecast.network.WifiNetworkResolver
 import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
 import java.io.Closeable
@@ -346,6 +347,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
     }
 
     private fun findLocalIpv4(): Inet4Address? {
+        WifiNetworkResolver.activeWifiIpv4(context)?.let { return it }
         val candidates = mutableListOf<Pair<Int, Inet4Address>>()
         val interfaces = NetworkInterface.getNetworkInterfaces()
         if (interfaces != null) {
