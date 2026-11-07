@@ -25,8 +25,9 @@
 - [x] Filename search and photo/video type filters.
 - [x] Memory-conscious thumbnail decoding for older Android versions.
 - [x] Unit tests for byte ranges, UPnP time values, MIME compatibility, media filters, media tokens and brand classification.
-- [x] GitHub Actions tests, debug and release APK builds, and R8 mapping/usage audit artifact.
+- [x] GitHub Actions tests, debug and release APK builds, with APK package verification.
 - [x] APK smoke checks for DLNA commands, streaming paths, shared-queue API routes and playback UI markers.
+- [x] Publish exactly one standalone PureCast APK; keep comparison builds internal to CI.
 
 ## Milestone 1 — Samsung and LG real-device interoperability
 
