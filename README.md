@@ -8,13 +8,13 @@ PureCast is an Android application for sending original photos and videos from p
 - Target phone families: Samsung Galaxy, Xiaomi and Redmi.
 - The same Android APK runs on all three families. Brand detection is used for diagnostics; the transfer implementation is manufacturer-neutral.
 - Other compatible Android phones are not blocked.
-- Multiple phones can independently send media to the same TV. A normal single DLNA renderer plays one current item; a new sender can replace it. A shared group queue is a future feature.
+- Multiple phones can independently send media to the same TV. A normal single DLNA renderer plays one current item; a new sender can replace it. A shared group queue is a future feature; the current playback queue is local to each sender and is not synchronized between phones.
 
 ## Core rule: Direct Play
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.4.0
+## Current implementation — 0.5.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
