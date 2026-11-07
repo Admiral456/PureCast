@@ -313,7 +313,10 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
         if (value.length !in 1..MAX_URL_LENGTH) return false
         return try {
             val uri = URI(value)
-            if (uri.scheme != "http" || uri.userInfo != null || uri.port !in 1..65535) return false
+            if (uri.scheme != "http" || uri.userInfo != null || uri.port !in 1..65535 ||
+                uri.query != null || uri.fragment != null ||
+                !MEDIA_PATH_PATTERN.matches(uri.path.orEmpty())
+            ) return false
             val host = uri.host ?: return false
             if (!IPV4_PATTERN.matches(host)) return false
             val address = InetAddress.getByName(host)
@@ -384,6 +387,7 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
         private const val MAX_JOIN_ATTEMPTS = 10
         private const val JOIN_WINDOW_MS = 60_000L
         private val IPV4_PATTERN = Regex("^\\d{1,3}(?:\\.\\d{1,3}){3}$")
+        private val MEDIA_PATH_PATTERN = Regex("^/media/[A-Za-z0-9_-]{12}$")
         private val random = SecureRandom()
         private const val INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
