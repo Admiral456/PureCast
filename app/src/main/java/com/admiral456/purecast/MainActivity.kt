@@ -55,6 +55,8 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.admiral456.purecast.device.ReceiverBrandClassifier
+import com.admiral456.purecast.device.SenderDeviceInfo
 import com.admiral456.purecast.dlna.DlnaController
 import com.admiral456.purecast.dlna.DlnaCompatibility
 import com.admiral456.purecast.dlna.MediaCompatibility
@@ -115,6 +117,7 @@ private fun PureCastScreen() {
     val scope = rememberCoroutineScope()
     val discovery = remember { DlnaDiscovery(appContext) }
     val controller = remember { DlnaController() }
+    val senderInfo = remember { SenderDeviceInfo.current() }
 
     var devices by remember { mutableStateOf<List<DlnaDevice>>(emptyList()) }
     var selectedDeviceId by remember { mutableStateOf<String?>(null) }
@@ -282,6 +285,11 @@ private fun PureCastScreen() {
                         color = Color.White.copy(alpha = 0.86f),
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    Text(
+                        "Telefon: ${senderInfo.brand.displayName} · ${senderInfo.model} · Android ${senderInfo.androidVersion}",
+                        color = Color.White.copy(alpha = 0.80f),
+                        style = MaterialTheme.typography.labelMedium
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         HeaderTag("Bez cloudu")
                         HeaderTag("Bez převodu")
@@ -345,6 +353,11 @@ private fun PureCastScreen() {
                     if (devices.isNotEmpty()) {
                         devices.forEach { device ->
                             val isSelected = device.id == selectedDeviceId
+                            val receiverBrand = ReceiverBrandClassifier.classify(
+                                device.manufacturer,
+                                device.modelName,
+                                device.friendlyName
+                            )
                             Card(
                                 shape = RoundedCornerShape(16.dp),
                                 colors = CardDefaults.cardColors(
@@ -369,6 +382,11 @@ private fun PureCastScreen() {
                                             TextButton(onClick = { selectedDeviceId = device.id }) { Text("Vybrat") }
                                         }
                                     }
+                                    Text(
+                                        "${receiverBrand.displayName} · ${receiverBrand.platformName}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.secondary
+                                    )
                                     Text("UPnP AVTransport · Direct Play", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                                 }
                             }
