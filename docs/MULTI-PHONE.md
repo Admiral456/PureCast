@@ -8,7 +8,7 @@ PureCast používá jeden Android APK pro telefony Samsung, Xiaomi, Redmi i dal�
 - Hostitel předá ostatním adresu ve tvaru `http://IP:PORT` a osmiznakový pozvánkový kód.
 - Ostatní telefony zadají adresu a kód v sekci **Sdílená fronta**.
 - Každý účastník může do společné fronty přidat vybrané fotografie a videa.
-- Hostitel jako jediný může změnit pořadí, odebrat položky a spouštět přehrávání na vybrané DLNA televizi.
+- Hostitel jako jediný může změnit pořadí, odebrat položky a spouštět přehrávání na vybrané DLNA televizi. Hostitel může přecházet také na předchozí a další položku.
 - Všichni připojení účastníci vidí stejný seznam a jeho stav se obnovuje přibližně každé dvě sekundy.
 
 ## Jak funguje přenos
@@ -27,4 +27,5 @@ Originální data zůstávají v odesílajícím telefonu. PureCast je nepřevá
 - Síťové řízení používá HTTP bez TLS. Připojuj pouze telefony, kterým důvěřuješ, a používej jen soukromou domácí síť.
 - Sdílené přehrávání zatím ovládá hostitel přes DLNA. Prohlížeč televize nemá dálkové ovládání sdílené fronty.
 - Párování QR kódem zatím není implementováno; adresa a kód se předávají ručně.
+- Při explicitním odpojení účastníka hostitel zneplatní jeho token a odebere jeho položky z fronty.
 
