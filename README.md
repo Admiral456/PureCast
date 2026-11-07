@@ -32,6 +32,10 @@ gradle :app:testDebugUnitTest :app:assembleDebug
 
 The debug APK is written to app/build/outputs/apk/debug/app-debug.apk.
 
+## Latest build
+
+The initial debug APK was built successfully by GitHub Actions on 7 November 2026. Download the `PureCast-debug-apk` artifact from [the successful workflow run](https://github.com/Admiral456/PureCast/actions/runs/42405818696). The ZIP contains `app-debug.apk`.
+
 ## First test
 
 1. Connect the phone and DLNA-capable TV to the same Wi-Fi network.
