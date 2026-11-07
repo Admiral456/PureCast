@@ -204,13 +204,51 @@ class LocalMediaServer(private val context: Context) : Closeable {
 
     private fun writeBrowserPlayer(socket: Socket, method: String, token: String, media: MediaFile) {
         val escapedName = htmlEscape(media.displayName)
+        val safeMime = htmlEscape(media.mimeType)
         val mediaPath = "/media/$token"
         val content = if (media.isImage) {
             "<img src=\"$mediaPath\" alt=\"$escapedName\">"
         } else if (media.isVideo) {
-            "<video controls autoplay playsinline preload=\"metadata\" src=\"$mediaPath\"></video>"
+            "<video id=\"player\" controls autoplay playsinline preload=\"metadata\">" +
+                "<source src=\"$mediaPath\" type=\"$safeMime\">" +
+                "Tento prohlížeč neumí přehrát vložené video. " +
+                "<a href=\"$mediaPath\">Zkusit otevřít originální soubor</a></video>"
         } else {
-            "<p>Televizor neumí rozpoznat typ tohoto souboru: $escapedName</p><a href=\"$mediaPath\">Otevřít soubor</a>"
+            "<p>Televizor neumí rozpoznat typ tohoto souboru: $escapedName</p>" +
+                "<a href=\"$mediaPath\">Otevřít originální soubor</a>"
+        }
+        val script = if (media.isVideo) {
+            """
+            <script>
+              (() => {
+                const player = document.getElementById('player');
+                const result = document.getElementById('compatibility');
+                const mime = '$safeMime';
+                if (!player || !result) return;
+                const support = player.canPlayType(mime);
+                result.textContent = support === 'probably'
+                  ? 'Prohlížeč pravděpodobně podporuje typ $safeMime. Konkrétní kodek a HDR se ověřují až při přehrávání.'
+                  : support === 'maybe'
+                    ? 'Prohlížeč uvádí možnou podporu $safeMime. Přesná kompatibilita není zaručena.'
+                    : 'Prohlížeč nepotvrdil podporu $safeMime. PureCast soubor nepřevádí.';
+                player.addEventListener('error', () => {
+                  result.textContent = 'Přehrávání selhalo. Televizor pravděpodobně nepodporuje tento formát nebo kodek.';
+                });
+                player.addEventListener('loadedmetadata', () => {
+                  if (player.videoWidth && player.videoHeight) {
+                    result.textContent += ' Zjištěné rozlišení: ' + player.videoWidth + ' × ' + player.videoHeight + '.';
+                  }
+                });
+              })();
+            </script>
+            """.trimIndent()
+        } else {
+            ""
+        }
+        val compatibilityPanel = if (media.isVideo) {
+            "<p id=\"compatibility\" class=\"compatibility\">Kontroluji možnosti přehrávače televize…</p>"
+        } else {
+            "<p class=\"compatibility\">Fotografie se načítá z původního souboru bez převodu.</p>"
         }
         val html = """
             <!doctype html>
@@ -221,15 +259,34 @@ class LocalMediaServer(private val context: Context) : Closeable {
               <meta name="color-scheme" content="dark">
               <title>PureCast – $escapedName</title>
               <style>
-                *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#080b13;color:#fff;font-family:system-ui,sans-serif}
-                body{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:12px}
-                header{position:fixed;top:0;left:0;right:0;padding:18px 24px;font-size:14px;color:#c8d2e8}
-                h1{font-size:16px;font-weight:600;margin:0}
-                img,video{max-width:100%;max-height:calc(100vh - 84px);object-fit:contain}
-                video{width:100%;height:100%;background:#000}
+                *{box-sizing:border-box}
+                html,body{margin:0;min-height:100%;background:#080b13;color:#fff;font-family:system-ui,-apple-system,sans-serif}
+                body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:76px 22px 26px;gap:18px}
+                header{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;gap:12px;padding:18px 24px;background:rgba(8,11,19,.94);border-bottom:1px solid #20283a}
+                .logo{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(135deg,#4059d6,#087f8c);font-weight:800}
+                h1{font-size:16px;font-weight:650;margin:0;overflow-wrap:anywhere}
+                .subtitle{font-size:12px;color:#9eabc5;margin-top:3px}
+                main{width:min(100%,1400px);display:flex;flex-direction:column;align-items:center;gap:14px}
+                .frame{display:flex;align-items:center;justify-content:center;width:100%;min-height:42vh;max-height:75vh;background:#000;border:1px solid #293248;border-radius:18px;overflow:hidden}
+                img{max-width:100%;max-height:72vh;object-fit:contain}
+                video{width:100%;height:auto;max-height:75vh;object-fit:contain;background:#000}
+                .compatibility{width:100%;margin:0;padding:12px 15px;border:1px solid #293248;border-radius:12px;color:#bdc9e0;font-size:13px;line-height:1.5;background:#121a2a}
+                .quality{font-size:12px;color:#8592ac;text-align:center}
+                a{color:#aebeff}
               </style>
             </head>
-            <body><header><h1>PureCast · $escapedName</h1></header>$content</body>
+            <body>
+              <header>
+                <div class="logo">PC</div>
+                <div><h1>PureCast · $escapedName</h1><div class="subtitle">Přehrávání originálního souboru v místní síti</div></div>
+              </header>
+              <main>
+                <div class="frame">$content</div>
+                $compatibilityPanel
+                <div class="quality">Bez cloudu · Bez překódování · Původní soubor</div>
+              </main>
+              $script
+            </body>
             </html>
         """.trimIndent().toByteArray(Charsets.UTF_8)
         val output = BufferedOutputStream(socket.getOutputStream())
