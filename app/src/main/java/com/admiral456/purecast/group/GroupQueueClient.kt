@@ -123,7 +123,7 @@ object GroupQueueClient {
         ) {
             throw IllegalArgumentException("Hostitel musí být dostupný přes soukromou IPv4 adresu Wi-Fi.")
         }
-        return "http://$host:\${uri.port}"
+        return "http://$host:${uri.port}"
     }
 
     private fun parseSnapshot(json: JSONObject): GroupQueueSnapshot {
