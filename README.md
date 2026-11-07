@@ -14,7 +14,7 @@ PureCast is an Android application for sending original photos and videos from p
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.8.0
+## Current implementation — 0.9.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
@@ -23,7 +23,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - Secure XML parsing and optional UPnP URLBase handling.
 - AVTransport play, pause, resume, stop, seek, playback-state and position queries.
 - ConnectionManager GetProtocolInfo parsing with conservative MIME-type compatibility reporting.
-- Local HTTP streaming of the original selected URI with byte-range support and Wi-Fi-first address selection.
+- Local HTTP streaming of the original selected URI with byte-range support, Wi-Fi-interface binding, bounded client concurrency and active-connection cleanup.
 - TV browser fallback page with responsive playback UI and a basic HTML5 MIME support hint.
 - Foreground media-playback service to keep streaming active when the app is backgrounded or the display turns off.
 - Android Photo Picker with persistent URI permission when the provider supports it.
@@ -32,10 +32,10 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - Progressive technical metadata inspection in small batches, with cancellation when a new selection replaces the previous one.
 - Technical metadata inspection for image size and video resolution, frame rate, video/audio MIME codecs, bitrate, duration and available HDR transfer metadata.
 - Unit tests for HTTP range handling, UPnP time values, DLNA MIME profiles and sender/receiver brand classification.
-- GitHub Actions CI builds debug, R8-optimized release and unminified release APK variants.
-- CI checks that DLNA commands, local media routes, shared-queue API endpoints and playback UI strings remain in both release packages after packaging.
-- CI uploads R8 mapping/usage/kept-class reports so removed code can be reviewed.
-- The unminified release variant uses the same source and features but disables R8 and resource shrinking. It exists for size comparison and diagnosis, not because the optimized build intentionally omits features.
+- GitHub Actions CI builds and verifies debug, R8-optimized and unminified release variants internally.
+- CI checks that DLNA commands, local media routes and shared-queue API endpoints survive release packaging.
+- CI publishes exactly one installable artifact: `PureCast-Android`, containing a single standalone `PureCast.apk`.
+- The published APK uses the unminified release configuration as a conservative full-size distribution build. Comparison variants are internal CI checks, not separate user downloads.
 
 ## Shared queue requirements and limitations
 
@@ -68,15 +68,15 @@ Open this repository in Android Studio and sync the Gradle project, or run:
 gradle :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:assembleUnminified
 ```
 
-The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`. The R8-optimized release APK is written to `app/build/outputs/apk/release/app-release.apk`. The full-size, unminified release APK is written to `app/build/outputs/apk/unminified/app-unminified.apk`. CI signs both release variants with its temporary debug certificate for sideload testing; this is not a Play Store signing key.
+CI creates several internal test builds, but copies only the chosen full-size release build into `app/build/outputs/apk/PureCast.apk` and publishes that one standalone APK. It is signed with a temporary debug certificate for sideload testing; this is not a Play Store signing key.
 
 ## Download
 
-The latest successful build is available from [GitHub Actions artifacts](https://github.com/Admiral456/PureCast/actions). Download `PureCast-release-apk` for the recommended R8-optimized installation build, `PureCast-full-apk` for the same source with shrinking disabled, or `PureCast-debug-apk` for the debug build. `PureCast-r8-audit` contains the class mapping, kept-class list and removed-code report.
+The latest successful build is available from [GitHub Actions artifacts](https://github.com/Admiral456/PureCast/actions). Download only `PureCast-Android`. It contains the standalone `PureCast.apk`; no companion APK, data package or separate receiver installation is required.
 
 ## Why the optimized APK is small
 
-PureCast does not bundle a video transcoder, codec framework, sample photos, sample videos, downloaded media or large image assets. It serves original files from Android content URIs and asks the TV to decode them. The release APK is therefore mostly app code and a small resource table. R8 removes unused parts of the AndroidX/Compose dependency graph; the unminified release is used for the single user-facing APK while R8 remains an internal comparison. CI verifies critical feature markers in both release packages. A small APK is not proof of missing functionality, and adding dummy files to increase its size would not make the app more complete.
+PureCast does not bundle a video transcoder, codec framework, sample photos, sample videos, downloaded media or large image assets. It serves original files from Android content URIs and asks the TV to decode them. The release APK is therefore mostly app code and a small resource table. R8 removes unused parts of the AndroidX/Compose dependency graph and remains an internal comparison build. The one user-facing APK uses the complete unminified release configuration. CI verifies critical feature markers in both release packages. A small APK is not proof of missing functionality, and adding dummy files to increase its size would not make the app more complete.
 
 ## Quality and compatibility notes
 
