@@ -299,7 +299,7 @@ private fun PureCastScreen() {
     fun playNextQueueItem() {
         val nextIndex = PlaybackQueueLogic.nextIndex(queueCurrentIndex, playbackQueue.size)
         if (nextIndex == null) {
-            status = "Fronta přehrávání je prázdná."
+            status = if (playbackQueue.isEmpty()) "Fronta přehrávání je prázdná." else "Dosáhl jsi poslední položky fronty."
             return
         }
         playQueueItem(nextIndex)
@@ -308,7 +308,7 @@ private fun PureCastScreen() {
     fun playPreviousQueueItem() {
         val previousIndex = PlaybackQueueLogic.previousIndex(queueCurrentIndex, playbackQueue.size)
         if (previousIndex == null) {
-            status = "Fronta přehrávání je prázdná."
+            status = if (playbackQueue.isEmpty()) "Fronta přehrávání je prázdná." else "Jsi na začátku fronty."
             return
         }
         playQueueItem(previousIndex)
@@ -716,7 +716,7 @@ private fun PureCastScreen() {
                             ) { Text("Přehrát od začátku") }
                             OutlinedButton(
                                 onClick = { playNextQueueItem() },
-                                enabled = activeDevice != null && busyLabel == null,
+                                enabled = activeDevice != null && busyLabel == null && queueCurrentIndex < playbackQueue.lastIndex,
                                 modifier = Modifier.weight(1f)
                             ) { Text("Další") }
                         }
@@ -799,13 +799,13 @@ private fun PureCastScreen() {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
                                 onClick = { playPreviousQueueItem() },
-                                enabled = busyLabel == null && queueCurrentIndex >= 0 && playbackQueue.size > 1,
+                                enabled = busyLabel == null && queueCurrentIndex > 0,
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                             ) { Text("Předchozí") }
                             OutlinedButton(
                                 onClick = { playNextQueueItem() },
-                                enabled = busyLabel == null && playbackQueue.isNotEmpty(),
+                                enabled = busyLabel == null && queueCurrentIndex < playbackQueue.lastIndex,
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                             ) { Text("Další") }
