@@ -36,12 +36,24 @@ jobs:
       - name: Install Android SDK components
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Run unit tests and build debug APK
-        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - name: Run unit tests and build debug and optimized release APKs
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease
+
+      - name: Report APK sizes
+        run: |
+          stat --printf="Debug APK: %s bytes\\n" app/build/outputs/apk/debug/app-debug.apk
+          stat --printf="Release APK: %s bytes\\n" app/build/outputs/apk/release/app-release.apk
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
         with:
           name: PureCast-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload optimized release APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: PureCast-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
