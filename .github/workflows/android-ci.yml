@@ -43,6 +43,7 @@ jobs:
         run: |
           python scripts/verify_apk.py app/build/outputs/apk/release/app-release.apk
           python scripts/verify_apk.py app/build/outputs/apk/unminified/app-unminified.apk
+          ${ANDROID_HOME}/build-tools/36.0.0/aapt dump badging app/build/outputs/apk/unminified/app-unminified.apk | grep -E "^application:.*icon='res/"
 
       - name: Prepare one user-facing PureCast APK
         run: |
