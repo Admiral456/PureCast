@@ -558,6 +558,16 @@ private fun PureCastScreen() {
         }
     }
 
+    fun playPreviousSharedEntry() {
+        val snapshot = sharedSnapshot ?: return
+        val previous = GroupQueueLogic.previousEntry(snapshot.entries, snapshot.currentEntryId)
+        if (previous == null) {
+            status = "Ve sdílené frontě už není předchozí položka."
+        } else {
+            playSharedEntry(previous)
+        }
+    }
+
     fun runPlaybackAction(label: String, action: suspend (DlnaDevice) -> Unit) {
         val device = playingDevice ?: return
         scope.launch {
@@ -1142,12 +1152,20 @@ private fun PureCastScreen() {
                             }
                         }
                         if (credentials.isHost && !snapshot?.entries.isNullOrEmpty()) {
-                            OutlinedButton(
-                                onClick = { playNextSharedEntry() },
-                                enabled = activeDevice != null && busyLabel == null && !sharedBusy &&
-                                    GroupQueueLogic.nextEntry(snapshot!!.entries, snapshot!!.currentEntryId) != null,
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text("Přehrát další položku") }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(
+                                    onClick = { playPreviousSharedEntry() },
+                                    enabled = activeDevice != null && busyLabel == null && !sharedBusy &&
+                                        GroupQueueLogic.previousEntry(snapshot!!.entries, snapshot!!.currentEntryId) != null,
+                                    modifier = Modifier.weight(1f)
+                                ) { Text("Předchozí") }
+                                OutlinedButton(
+                                    onClick = { playNextSharedEntry() },
+                                    enabled = activeDevice != null && busyLabel == null && !sharedBusy &&
+                                        GroupQueueLogic.nextEntry(snapshot!!.entries, snapshot!!.currentEntryId) != null,
+                                    modifier = Modifier.weight(1f)
+                                ) { Text("Další") }
+                            }
                         }
                     }
                     sharedSyncError?.let {
