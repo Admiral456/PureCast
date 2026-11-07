@@ -55,7 +55,7 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
         socket.reuseAddress = true
         socket.bind(InetSocketAddress("0.0.0.0", 0))
         serverSocket = socket
-        baseUrl = "http://\${ip.hostAddress}:\${socket.localPort}"
+        baseUrl = "http://${ip.hostAddress}:${socket.localPort}"
         Thread({
             while (!socket.isClosed) {
                 try {
@@ -378,7 +378,7 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
             429 -> "Too Many Requests"; else -> "Error"
         }
         val header = "HTTP/1.1 $status $reason\r\nContent-Type: application/json; charset=utf-8\r\n" +
-            "Content-Length: \${body.size}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n" +
+            "Content-Length: ${body.size}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n" +
             "Connection: close\r\n\r\n"
         val output = socket.getOutputStream()
         output.write(header.toByteArray(Charsets.US_ASCII))
