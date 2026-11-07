@@ -86,6 +86,7 @@ class DlnaDiscovery(context: Context) {
                 isXIncludeAware = false
                 isExpandEntityReferences = false
             }
+            connection.setRequestProperty("Accept-Encoding", "identity")
             val document = connection.inputStream.use { factory.newDocumentBuilder().parse(it) }
             val allDevices = document.getElementsByTagName("device")
             var renderer: Element? = null
@@ -117,7 +118,7 @@ class DlnaDiscovery(context: Context) {
                 manufacturer = deviceElement.firstText("manufacturer").ifBlank { null },
                 modelName = deviceElement.firstText("modelName").ifBlank { null },
                 location = location,
-                avTransportControlUrl = URL(URL(location), controlPath).toExternalForm(),
+                avTransportControlUrl = resolvedControlUrl,
                 serviceType = serviceType
             )
         } catch (_: Exception) {
