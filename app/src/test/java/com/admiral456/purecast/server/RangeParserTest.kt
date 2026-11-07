@@ -54,4 +54,23 @@ class RangeParserTest {
     fun rejectsZeroLengthResource() {
         assertNull(RangeParser.parse("bytes=0-", 0))
     }
+    @Test
+    fun parsesCaseInsensitiveRangeUnit() {
+        assertEquals(ByteRange(10, 19), RangeParser.parse("BYTES=10-19", 100))
+    }
+
+    @Test
+    fun rejectsNumbersOutsideLongRange() {
+        assertNull(RangeParser.parse("bytes=9223372036854775808-", 100))
+        assertNull(RangeParser.parse("bytes=-9223372036854775808", 100))
+    }
+
+    @Test
+    fun maximumValidRangeLengthDoesNotOverflow() {
+        assertEquals(
+            Long.MAX_VALUE,
+            RangeParser.parse("bytes=0-${Long.MAX_VALUE}", Long.MAX_VALUE)?.length
+        )
+    }
+
 }
