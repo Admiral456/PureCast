@@ -1,5 +1,7 @@
 # Používání PureCast z více telefonů
 
+PureCast se instaluje jako jedna samostatná Android aplikace z jediného APK. Není potřeba žádný doplňkový APK, samostatný receiver ani instalace na televizi.
+
 PureCast používá jeden Android APK pro telefony Samsung, Xiaomi, Redmi i další kompatibilní Android zařízení. Sdílená skupina funguje v rámci jedné místní Wi-Fi sítě.
 
 ## Aktuální chování
