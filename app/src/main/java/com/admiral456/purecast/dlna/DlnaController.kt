@@ -9,6 +9,32 @@ import kotlinx.coroutines.withContext
 
 data class DlnaTransportInfo(val state: String, val status: String)
 
+data class DlnaPositionInfo(
+    val positionSeconds: Long?,
+    val durationSeconds: Long?
+)
+
+object UpnpTime {
+    fun parseSeconds(value: String?): Long? {
+        if (value.isNullOrBlank() || value == "NOT_IMPLEMENTED") return null
+        val parts = value.trim().split(":")
+        if (parts.size != 3) return null
+        val hours = parts[0].toLongOrNull() ?: return null
+        val minutes = parts[1].toLongOrNull() ?: return null
+        val seconds = parts[2].toDoubleOrNull() ?: return null
+        if (hours < 0 || minutes !in 0..59 || seconds < 0.0 || seconds >= 60.0) return null
+        return hours * 3_600L + minutes * 60L + seconds.toLong()
+    }
+
+    fun formatSeconds(value: Long): String {
+        val safe = value.coerceAtLeast(0L)
+        val hours = safe / 3_600L
+        val minutes = (safe % 3_600L) / 60L
+        val seconds = safe % 60L
+        return "%02d:%02d:%02d".format(hours, minutes, seconds)
+    }
+}
+
 class DlnaController {
     suspend fun play(device: DlnaDevice, mediaUrl: String, media: MediaFile) = withContext(Dispatchers.IO) {
         val didl = didlMetadata(media, mediaUrl)
@@ -32,12 +58,21 @@ class DlnaController {
 
     suspend fun seekToSeconds(device: DlnaDevice, seconds: Long) = withContext(Dispatchers.IO) {
         require(seconds >= 0L) { "Čas přehrávání nesmí být záporný." }
-        val hours = seconds / 3_600L
-        val minutes = (seconds % 3_600L) / 60L
-        val remainingSeconds = seconds % 60L
-        val target = "%02d:%02d:%02d".format(hours, minutes, remainingSeconds)
+        val target = UpnpTime.formatSeconds(seconds)
         postAction(device, "Seek",
             "<InstanceID>0</InstanceID><Unit>REL_TIME</Unit><Target>$target</Target>")
+    }
+
+    suspend fun getPositionInfo(device: DlnaDevice): DlnaPositionInfo = withContext(Dispatchers.IO) {
+        val response = postAction(device, "GetPositionInfo", "<InstanceID>0</InstanceID>")
+        val document = secureDocumentFactory().newDocumentBuilder()
+            .parse(response.byteInputStream(Charsets.UTF_8))
+        val position = document.getElementsByTagName("RelTime").item(0)?.textContent
+        val duration = document.getElementsByTagName("TrackDuration").item(0)?.textContent
+        DlnaPositionInfo(
+            positionSeconds = UpnpTime.parseSeconds(position),
+            durationSeconds = UpnpTime.parseSeconds(duration)
+        )
     }
 
     suspend fun getTransportInfo(device: DlnaDevice): DlnaTransportInfo = withContext(Dispatchers.IO) {
