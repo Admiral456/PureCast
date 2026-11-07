@@ -1,36 +1,42 @@
 # PureCast roadmap
 
-## Milestone 0 — working Android foundation
+## Milestone 0 — Android cross-brand foundation
 
-- [x] Kotlin/Jetpack Compose project and Czech light/dark UI.
+- [x] Android/Kotlin/Jetpack Compose application; no iOS target.
+- [x] Brand-neutral Android sender for Samsung, Xiaomi and Redmi families.
+- [x] Sender phone brand/model identification for diagnostics.
+- [x] TV brand/platform classification from UPnP descriptions.
+- [x] Czech light/dark UI.
 - [x] Photo Picker selection and URI permission retention where supported.
 - [x] SSDP discovery for UPnP MediaRenderer devices.
 - [x] Secure device-description XML parsing and optional URLBase resolution.
 - [x] AVTransport SetAVTransportURI, Play, Pause, Stop, Seek and state/position queries.
 - [x] ConnectionManager GetProtocolInfo and conservative MIME-profile compatibility evaluation.
 - [x] Original-source local HTTP streaming with byte-range support.
-- [x] TV browser fallback page served directly by the phone.
+- [x] TV browser fallback page with responsive controls and browser MIME support hint.
 - [x] Foreground playback service and persistent playback notification.
 - [x] Image/video technical metadata inspection.
-- [x] Unit tests for byte ranges, UPnP time values and MIME compatibility.
+- [x] Unit tests for byte ranges, UPnP time values, MIME compatibility and brand classification.
 - [x] GitHub Actions tests and debug APK build.
 
-## Milestone 1 — real-device interoperability
+## Milestone 1 — Samsung and LG real-device interoperability
 
-- [ ] Test discovery and playback on the LG 55UJ7507.
-- [ ] Capture actual SSDP replies and UPnP service descriptions from LG firmware.
-- [ ] Verify which photo formats the LG browser and/or DLNA renderer accepts.
-- [ ] Test H.264/AAC MP4 and supported image formats first, then test selected high-resolution files.
+- [ ] Test discovery and playback on Samsung Tizen Smart TVs from more than one model year.
+- [ ] Test discovery and playback on LG 55UJ7507.
+- [ ] Capture real SSDP replies and UPnP service descriptions from Samsung and LG firmware.
+- [ ] Verify Samsung and LG browser fallback with JPEG and H.264/AAC MP4.
+- [ ] Verify supported HEVC/HDR and high-FPS sample files only against each model's published decoder spec.
 - [ ] Verify pause, seek, stop and background streaming on physical hardware.
-- [ ] Add device-specific workarounds only when supported by captured device responses.
+- [ ] Add model-specific workarounds only when supported by captured device responses or repeatable tests.
 
-## Milestone 2 — richer library and diagnostics
+## Milestone 2 — multi-phone and library features
 
+- [x] Allow multiple Android phone brands to run the same APK.
 - [ ] Gallery with thumbnails, albums, sorting, search and multi-select.
-- [ ] Display full technical details and keep unknown values distinct from unsupported values.
-- [ ] Add per-TV capability profiles based on actual UPnP protocolInfo and tested formats.
+- [ ] Shared local group queue for multiple phones, with host/queue permissions.
+- [ ] Show sender identity for items submitted to a shared queue.
+- [ ] Improve per-device compatibility profiles from actual UPnP protocolInfo and test results.
 - [ ] Improve friendly error explanations for Wi-Fi isolation, unsupported format and expired file URI access.
-- [ ] Add optional manual IP/URL connection for TV browser fallback.
 
 ## Milestone 3 — robust streaming and security
 
@@ -43,10 +49,11 @@
 
 ## Release acceptance checks
 
-1. A TV renderer is discovered on the same local network, or the user receives an actionable explanation.
-2. A selected media file is served byte-for-byte; no transcoder is present in the pipeline.
-3. HEAD and GET requests return correct MIME type and length where known.
-4. Range requests return 206 with a valid Content-Range.
-5. Unsupported formats fail visibly rather than silently lowering quality.
-6. Streaming continues while the app is backgrounded with its foreground service active.
-7. Device-specific support claims are backed by tests on the actual TV model.
+1. Samsung Galaxy, Xiaomi and Redmi phones run the same Android APK.
+2. A Samsung or LG TV is discovered when it exposes a controllable DLNA renderer, or the user receives a clear browser fallback route.
+3. A selected media file is served byte-for-byte; no transcoder is present in the pipeline.
+4. HEAD and GET requests return correct MIME type and length where known.
+5. Range requests return 206 with a valid Content-Range.
+6. Unsupported formats fail visibly rather than silently lowering quality.
+7. Streaming continues while the app is backgrounded with its foreground service active.
+8. Device-specific support claims are backed by tests on the actual TV model and firmware.
