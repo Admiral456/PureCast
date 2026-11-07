@@ -218,7 +218,8 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
             tokens.remove(token)
             val removedIds = entries.filter { it.senderParticipantId == participantId }.map { it.id }.toSet()
             entries.removeAll { it.senderParticipantId == participantId }
-            if (currentEntryId in removedIds) currentEntryId = null
+            val playingId = currentEntryId
+            if (playingId != null && playingId in removedIds) currentEntryId = null
             revision++
         }
         respond(socket, 200, JSONObject().put("left", true))
