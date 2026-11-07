@@ -1,24 +1,30 @@
 # Používání PureCast z více telefonů
 
-PureCast je možné nainstalovat na více Android telefonech v jedné domácí síti. Samsung, Xiaomi a Redmi používají stejný Android APK.
+PureCast používá jeden Android APK pro telefony Samsung, Xiaomi, Redmi i další kompatibilní Android zařízení. Sdílená skupina funguje v rámci jedné místní Wi-Fi sítě.
 
-## Současná verze
+## Aktuální chování
 
-Každý telefon funguje jako nezávislý odesílatel:
-- vybírá svoje vlastní soubory,
-- poskytuje originální soubor přes lokální HTTP server telefonu,
-- vyhledá kompatibilní DLNA televizory,
-- může odeslat soubor do stejné televize jako jiný telefon.
+- Jeden telefon založí skupinu a stane se hostitelem.
+- Hostitel předá ostatním adresu ve tvaru `http://IP:PORT` a osmiznakový pozvánkový kód.
+- Ostatní telefony zadají adresu a kód v sekci **Sdílená fronta**.
+- Každý účastník může do společné fronty přidat vybrané fotografie a videa.
+- Hostitel jako jediný může změnit pořadí, odebrat položky a spouštět přehrávání na vybrané DLNA televizi.
+- Všichni připojení účastníci vidí stejný seznam a jeho stav se obnovuje přibližně každé dvě sekundy.
 
-Televizor s jedním DLNA AVTransport obvykle zpracovává jednu aktivní položku. Když jiný telefon odešle nový příkaz, může přehrávání nahradit. To je standardní chování jednoho rendereru, ne chyba značky telefonu.
+## Jak funguje přenos
 
-## Budoucí sdílená fronta
+Média se nekopírují na hostitelský telefon. Odesílající telefon vystaví přes svůj lokální HTTP server pouze konkrétní vybraný soubor. Sdílená fronta předá hostiteli jeho název, MIME typ a časově omezenou URL. Hostitel pak pošle tuto URL přímo do DLNA televize.
 
-Koordinovaná fronta může být přidána v další etapě:
-1. Jeden telefon založí lokální skupinu.
-2. Ostatní telefony se připojí pomocí QR kódu nebo krátkého kódu.
-3. Každý uživatel přidá vybranou položku do společné fronty.
-4. Host nebo oprávněný člen rozhoduje, co se přehraje.
-5. Všichni členové vidí stav fronty.
+Originální data zůstávají v odesílajícím telefonu. PureCast je nepřevádí ani nekomprimuje. Televize musí sama podporovat konkrétní kontejner, kodek, rozlišení, FPS a HDR formát.
 
-Sdílení se má odehrávat v domácí síti a pouze pro explicitně vybrané soubory. Celá galerie telefonu se nesdílí.
+## Podmínky a omezení
+
+- Všechny telefony a TV musí být ve stejné důvěryhodné Wi-Fi síti. Guest Wi-Fi nebo izolace klientů může spojení zablokovat.
+- Hostitelská aplikace musí zůstat spuštěná. Když Android ukončí proces hostitele, skupina skončí.
+- Telefon, který přidal médium, musí zůstat dostupný, dokud se jeho položka přehrává. Force-stop, ukončení procesu nebo změna sítě může odkaz přerušit.
+- Odkazy na média mají platnost šest hodin. Po vypršení je potřeba položku z telefonu znovu přidat.
+- Skupina i fronta jsou pouze v paměti. Po ukončení hostitelské aplikace se relace neobnoví.
+- Síťové řízení používá HTTP bez TLS. Připojuj pouze telefony, kterým důvěřuješ, a používej jen soukromou domácí síť.
+- Sdílené přehrávání zatím ovládá hostitel přes DLNA. Prohlížeč televize nemá dálkové ovládání sdílené fronty.
+- Párování QR kódem zatím není implementováno; adresa a kód se předávají ručně.
+
