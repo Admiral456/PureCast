@@ -47,19 +47,23 @@ def verify_apk(path: Path) -> None:
         if "resources.arsc" not in names:
             raise ValueError("Compiled Android resources are missing")
 
+        # AAPT2 compiles vector and adaptive-icon XML into Android resources.
+        # Their source XML files are not guaranteed to remain as ZIP entries.
+        resource_table = apk.read("resources.arsc")
         required_icons = (
-            "ic_launcher.xml",
-            "ic_launcher_round.xml",
-            "ic_launcher_foreground.xml",
-            "ic_launcher_monochrome.xml",
+            b"ic_launcher",
+            b"ic_launcher_round",
+            b"ic_launcher_foreground",
+            b"ic_launcher_monochrome",
         )
         missing_icons = [
-            icon for icon in required_icons
-            if not any(name.endswith("/" + icon) for name in names)
+            icon.decode("ascii")
+            for icon in required_icons
+            if icon not in resource_table
         ]
         if missing_icons:
             raise ValueError(
-                "PureCast launcher icon resources are missing: "
+                "Compiled PureCast launcher icon resources are missing: "
                 + ", ".join(missing_icons)
             )
 
