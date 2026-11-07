@@ -46,7 +46,11 @@ object MediaThumbnailLoader {
                     targetHeight
                 )
             } else {
-                retriever.getFrameAtTime(-1L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                val sourceWidth = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()
+                val sourceHeight = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()
+                val pixels = sourceWidth?.toLong()?.times(sourceHeight?.toLong() ?: 0L) ?: 0L
+                if (pixels > MAX_UNSCALED_VIDEO_PIXELS) null
+                else retriever.getFrameAtTime(-1L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
             }
             frame?.fitInside(targetWidth, targetHeight)
         } catch (_: Exception) {
@@ -90,8 +94,8 @@ object MediaThumbnailLoader {
         var sampleSize = 1
         val width = options.outWidth
         val height = options.outHeight
-        while (width / (sampleSize * 2) >= targetWidth &&
-            height / (sampleSize * 2) >= targetHeight
+        while (width / (sampleSize * 2) >= targetWidth * 2 ||
+            height / (sampleSize * 2) >= targetHeight * 2
         ) {
             sampleSize *= 2
         }
@@ -110,4 +114,6 @@ object MediaThumbnailLoader {
         if (scaled !== this) recycle()
         return scaled
     }
+
+    private const val MAX_UNSCALED_VIDEO_PIXELS = 12_000_000L
 }
