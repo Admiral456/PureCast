@@ -32,6 +32,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
@@ -58,6 +59,8 @@ import com.admiral456.purecast.dlna.DlnaController
 import com.admiral456.purecast.dlna.DlnaDevice
 import com.admiral456.purecast.dlna.DlnaDiscovery
 import com.admiral456.purecast.dlna.DlnaTransportInfo
+import com.admiral456.purecast.dlna.DlnaPositionInfo
+import com.admiral456.purecast.dlna.UpnpTime
 import com.admiral456.purecast.media.MediaFile
 import com.admiral456.purecast.server.LocalMediaServer
 import java.util.Locale
@@ -120,6 +123,8 @@ private fun PureCastScreen() {
     var playingFile by remember { mutableStateOf<MediaFile?>(null) }
     var browserUrl by remember { mutableStateOf<String?>(null) }
     var transportInfo by remember { mutableStateOf<DlnaTransportInfo?>(null) }
+    var positionInfo by remember { mutableStateOf<DlnaPositionInfo?>(null) }
+    var seekPreviewSeconds by remember { mutableStateOf(0f) }
 
     DisposableEffect(mediaServer) {
         onDispose { mediaServer.close() }
@@ -169,6 +174,8 @@ private fun PureCastScreen() {
                 playingFile = file
                 browserUrl = mediaServer.browserPlayerUrl(streamUrl)
                 transportInfo = null
+                positionInfo = null
+                seekPreviewSeconds = 0f
                 controller.play(device, streamUrl, file)
                 status = "Příkaz k přehrání byl odeslán do ${device.friendlyName}."
             } catch (error: Exception) {
@@ -471,6 +478,7 @@ private fun PureCastScreen() {
                                         playingFile = null
                                         browserUrl = null
                                         transportInfo = null
+                                        positionInfo = null
                                     }
                                 },
                                 enabled = busyLabel == null,
@@ -482,6 +490,8 @@ private fun PureCastScreen() {
                             onClick = {
                                 runPlaybackAction("Stahuji stav z televize…") {
                                     transportInfo = controller.getTransportInfo(it)
+                                    positionInfo = controller.getPositionInfo(it)
+                                    seekPreviewSeconds = positionInfo?.positionSeconds?.toFloat() ?: 0f
                                     status = "Stav televize byl aktualizován."
                                 }
                             },
@@ -493,6 +503,36 @@ private fun PureCastScreen() {
                                 text = "Stav: ${it.state.replace('_', ' ')} · ${it.status}",
                                 error = it.status != "OK" && it.status != "UNKNOWN"
                             )
+                        }
+                        positionInfo?.let { position ->
+                            val duration = position.durationSeconds
+                            if (duration != null && duration > 0L) {
+                                val maxPosition = duration.toFloat().coerceAtLeast(1f)
+                                Text(
+                                    formatPlaybackTime(position.positionSeconds) + " / " + formatPlaybackTime(duration),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Slider(
+                                    value = seekPreviewSeconds.coerceIn(0f, maxPosition),
+                                    onValueChange = { seekPreviewSeconds = it },
+                                    valueRange = 0f..maxPosition,
+                                    enabled = busyLabel == null,
+                                    onValueChangeFinished = {
+                                        val target = seekPreviewSeconds.toLong().coerceIn(0L, duration)
+                                        runPlaybackAction("Posouvám video na " + formatPlaybackTime(target)) {
+                                            controller.seekToSeconds(it, target)
+                                            positionInfo = positionInfo?.copy(positionSeconds = target)
+                                        }
+                                    }
+                                )
+                            } else {
+                                Text(
+                                    "Televize neposkytla délku ani pozici videa.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                         }
                         browserUrl?.let { url ->
@@ -581,6 +621,9 @@ private fun EmptyState(title: String, body: String) {
         Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
+
+private fun formatPlaybackTime(seconds: Long?): String =
+    seconds?.let(UpnpTime::formatSeconds) ?: "--:--:--"
 
 private fun formatSize(bytes: Long?): String {
     if (bytes == null || bytes < 0L) return "Velikost neznámá"
