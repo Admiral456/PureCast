@@ -14,7 +14,7 @@ import org.w3c.dom.Element
 class DlnaDiscovery(context: Context) {
     private val appContext = context.applicationContext
 
-    suspend fun discover(timeoutMs: Long = 4_500L): List<DlnaDevice> = withContext(Dispatchers.IO) {
+    suspend fun discover(timeoutMs: Long = 5_000L): List<DlnaDevice> = withContext(Dispatchers.IO) {
         discoverBlocking(timeoutMs)
     }
 
@@ -24,21 +24,26 @@ class DlnaDiscovery(context: Context) {
             setReferenceCounted(false)
             acquire()
         }
-
         val locations = linkedSetOf<String>()
-        val message = (
-            "M-SEARCH * HTTP/1.1\r\n" +
-                "HOST: 239.255.255.250:1900\r\n" +
-                "MAN: \"ssdp:discover\"\r\n" +
-                "MX: 2\r\n" +
-                "ST: urn:schemas-upnp-org:device:MediaRenderer:1\r\n\r\n"
-            ).toByteArray(Charsets.UTF_8)
+        val searchTargets = listOf(
+            "urn:schemas-upnp-org:device:MediaRenderer:1",
+            "urn:schemas-upnp-org:device:MediaRenderer:2",
+            "ssdp:all"
+        )
 
         try {
             DatagramSocket().use { socket ->
-                socket.soTimeout = 350
+                socket.soTimeout = 300
                 val destination = InetAddress.getByName("239.255.255.250")
-                socket.send(DatagramPacket(message, message.size, destination, 1900))
+                searchTargets.forEach { target ->
+                    val message = (
+                        "M-SEARCH * HTTP/1.1\r\n" +
+                        "HOST: 239.255.255.250:1900\r\n" +
+                        "MAN: \"ssdp:discover\"\r\n" +
+                        "MX: 2\r\nST: $target\r\n\r\n"
+                    ).toByteArray(Charsets.UTF_8)
+                    socket.send(DatagramPacket(message, message.size, destination, 1900))
+                }
 
                 val deadline = System.currentTimeMillis() + timeoutMs
                 while (System.currentTimeMillis() < deadline) {
@@ -47,21 +52,23 @@ class DlnaDiscovery(context: Context) {
                         val packet = DatagramPacket(buffer, buffer.size)
                         socket.receive(packet)
                         val response = String(packet.data, packet.offset, packet.length, Charsets.UTF_8)
-                        response.lineSequence()
-                            .firstOrNull { it.startsWith("LOCATION:", ignoreCase = true) }
-                            ?.substringAfter(':')
-                            ?.trim()
-                            ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
-                            ?.let(locations::add)
+                        val location = response.lineSequence().mapNotNull { line ->
+                            val colon = line.indexOf(':')
+                            if (colon <= 0) null else if (
+                                line.substring(0, colon).trim().equals("LOCATION", ignoreCase = true)
+                            ) line.substring(colon + 1).trim() else null
+                        }.firstOrNull()?.takeIf {
+                            it.startsWith("http://", true) || it.startsWith("https://", true)
+                        }
+                        if (location != null) locations.add(location)
                     } catch (_: java.net.SocketTimeoutException) {
-                        // Continue until the discovery window expires.
+                        // Continue collecting replies until the search window expires.
                     }
                 }
             }
         } finally {
             if (multicastLock.isHeld) multicastLock.release()
         }
-
         return locations.mapNotNull(::loadRendererDescription).distinctBy { it.id }
     }
 
@@ -70,11 +77,8 @@ class DlnaDiscovery(context: Context) {
         connection.connectTimeout = 4_000
         connection.readTimeout = 4_000
         connection.requestMethod = "GET"
-
         return try {
-            val code = connection.responseCode
-            if (code !in 200..299) return null
-
+            if (connection.responseCode !in 200..299) return null
             val factory = DocumentBuilderFactory.newInstance().apply {
                 setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
                 setFeature("http://xml.org/sax/features/external-general-entities", false)
@@ -82,25 +86,20 @@ class DlnaDiscovery(context: Context) {
                 isXIncludeAware = false
                 isExpandEntityReferences = false
             }
-            val document = connection.inputStream.use { input ->
-                factory.newDocumentBuilder().parse(input)
-            }
-
+            val document = connection.inputStream.use { factory.newDocumentBuilder().parse(it) }
             val allDevices = document.getElementsByTagName("device")
             var renderer: Element? = null
             for (index in 0 until allDevices.length) {
                 val candidate = allDevices.item(index) as? Element ?: continue
-                val type = candidate.firstText("deviceType")
-                if (type.contains("MediaRenderer", ignoreCase = true)) {
+                if (candidate.firstText("deviceType").contains("MediaRenderer", ignoreCase = true)) {
                     renderer = candidate
                     break
                 }
             }
-            val deviceElement = renderer ?: document.documentElement
+            val deviceElement = renderer ?: return null
             val services = deviceElement.getElementsByTagName("service")
             var serviceType: String? = null
             var controlPath: String? = null
-
             for (index in 0 until services.length) {
                 val service = services.item(index) as? Element ?: continue
                 val type = service.firstText("serviceType")
@@ -111,18 +110,14 @@ class DlnaDiscovery(context: Context) {
                     break
                 }
             }
-
             if (serviceType == null || controlPath == null) return null
-
-            val controlUrl = URL(URL(location), controlPath).toExternalForm()
-            val id = deviceElement.firstText("UDN").ifBlank { location }
             DlnaDevice(
-                id = id,
+                id = deviceElement.firstText("UDN").ifBlank { location },
                 friendlyName = deviceElement.firstText("friendlyName").ifBlank { "DLNA televizor" },
                 manufacturer = deviceElement.firstText("manufacturer").ifBlank { null },
                 modelName = deviceElement.firstText("modelName").ifBlank { null },
                 location = location,
-                avTransportControlUrl = controlUrl,
+                avTransportControlUrl = URL(URL(location), controlPath).toExternalForm(),
                 serviceType = serviceType
             )
         } catch (_: Exception) {
