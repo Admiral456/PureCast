@@ -438,6 +438,14 @@ private fun PureCastScreen() {
     }
 
     fun leaveSharedGroup() {
+        val credentials = sharedCredentials
+        if (credentials != null && !credentials.isHost) {
+            scope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) { GroupQueueClient.leave(credentials) }
+                }
+            }
+        }
         groupServer?.close()
         groupServer = null
         sharedCredentials = null
