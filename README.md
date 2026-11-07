@@ -18,7 +18,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 
 ## Requirements
 
-- Android Studio with Android SDK Platform 37 installed.
+- Android Studio with Android SDK Platform 36 installed.
 - JDK 17 or newer supported by the selected Android Gradle Plugin.
 - Phone and TV on the same local network. Guest Wi-Fi and client isolation can block discovery and playback.
 
