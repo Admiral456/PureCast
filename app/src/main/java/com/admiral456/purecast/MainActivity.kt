@@ -42,6 +42,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -64,6 +65,8 @@ import com.admiral456.purecast.dlna.DlnaTransportInfo
 import com.admiral456.purecast.dlna.DlnaPositionInfo
 import com.admiral456.purecast.dlna.UpnpTime
 import com.admiral456.purecast.media.MediaFile
+import com.admiral456.purecast.media.MediaInspector
+import com.admiral456.purecast.media.MediaTechnicalInfo
 import com.admiral456.purecast.server.LocalMediaServer
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -117,6 +120,7 @@ private fun PureCastScreen() {
     var devices by remember { mutableStateOf<List<DlnaDevice>>(emptyList()) }
     var selectedDeviceId by remember { mutableStateOf<String?>(null) }
     val selectedFiles = remember { mutableStateListOf<MediaFile>() }
+    val technicalInfo = remember { mutableStateMapOf<String, MediaTechnicalInfo>() }
     var isScanning by remember { mutableStateOf(false) }
     var busyLabel by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf("Připoj telefon a televizi ke stejné Wi-Fi síti.") }
@@ -153,6 +157,13 @@ private fun PureCastScreen() {
                 val files = withContext(Dispatchers.IO) {
                     uris.mapNotNull { uri -> MediaFile.fromUri(appContext, uri) }
                 }
+                val details = withContext(Dispatchers.IO) {
+                    files.mapNotNull { file ->
+                        MediaInspector.inspect(appContext, file)?.let { file.uri.toString() to it }
+                    }.toMap()
+                }
+                technicalInfo.clear()
+                technicalInfo.putAll(details)
                 selectedFiles.clear()
                 selectedFiles.addAll(files)
                 isError = files.isEmpty()
@@ -411,8 +422,28 @@ private fun PureCastScreen() {
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(file.displayName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             Text("${file.mimeType}  ·  ${formatSize(file.sizeBytes)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            technicalInfo[file.uri.toString()]?.let { info ->
+                                                val technicalParts = listOfNotNull(
+                                                    info.resolutionLabel(),
+                                                    info.frameRate?.let { String.format(Locale.US, "%.2f FPS", it) },
+                                                    info.videoMimeType,
+                                                    info.audioMimeTypes.firstOrNull(),
+                                                    info.bitrateBitsPerSecond?.let(::formatBitrate),
+                                                    info.durationMillis?.let { "Délka " + formatPlaybackTime(it / 1_000L) },
+                                                    if (file.isVideo) "HDR " + (info.hdrLabel ?: "neověřeno") else null
+                                                )
+                                                if (technicalParts.isNotEmpty()) {
+                                                    Text(
+                                                        technicalParts.joinToString(" · "),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.secondary,
+                                                        maxLines = 2,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                            }
                                         }
-                                        TextButton(onClick = { selectedFiles.remove(file) }) { Text("Odebrat") }
+                                        TextButton(onClick = { selectedFiles.remove(file); technicalInfo.remove(file.uri.toString()) }) { Text("Odebrat") }
                                     }
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                                         Button(
@@ -636,6 +667,11 @@ private fun EmptyState(title: String, body: String) {
 
 private fun formatPlaybackTime(seconds: Long?): String =
     seconds?.let(UpnpTime::formatSeconds) ?: "--:--:--"
+
+private fun formatBitrate(bitsPerSecond: Long): String {
+    val megabits = bitsPerSecond / 1_000_000.0
+    return String.format(Locale.US, "%.1f Mbps", megabits)
+}
 
 private fun formatSize(bytes: Long?): String {
     if (bytes == null || bytes < 0L) return "Velikost neznámá"
