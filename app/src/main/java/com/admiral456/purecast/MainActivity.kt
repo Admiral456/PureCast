@@ -11,6 +11,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -40,6 +43,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
@@ -49,12 +53,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.size
 import com.admiral456.purecast.device.ReceiverBrandClassifier
 import com.admiral456.purecast.device.SenderDeviceInfo
 import com.admiral456.purecast.dlna.DlnaController
@@ -67,11 +74,16 @@ import com.admiral456.purecast.dlna.DlnaPositionInfo
 import com.admiral456.purecast.dlna.UpnpTime
 import com.admiral456.purecast.media.MediaFile
 import com.admiral456.purecast.media.MediaInspector
+import com.admiral456.purecast.media.MediaKindFilter
+import com.admiral456.purecast.media.MediaLibraryFilter
+import com.admiral456.purecast.media.MediaThumbnailLoader
 import com.admiral456.purecast.media.MediaTechnicalInfo
 import com.admiral456.purecast.playback.PureCastPlaybackService
 import com.admiral456.purecast.playback.PureCastRuntime
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -123,6 +135,9 @@ private fun PureCastScreen() {
     var selectedDeviceId by remember { mutableStateOf<String?>(null) }
     val selectedFiles = remember { mutableStateListOf<MediaFile>() }
     val technicalInfo = remember { mutableStateMapOf<String, MediaTechnicalInfo>() }
+    var mediaSearchQuery by remember { mutableStateOf("") }
+    var mediaKindFilter by remember { mutableStateOf(MediaKindFilter.ALL) }
+    val visibleFiles = MediaLibraryFilter.filter(selectedFiles, mediaSearchQuery, mediaKindFilter)
     var isScanning by remember { mutableStateOf(false) }
     var busyLabel by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf("Připoj telefon a televizi ke stejné Wi-Fi síti.") }
@@ -153,23 +168,31 @@ private fun PureCastScreen() {
             }
             scope.launch {
                 val files = withContext(Dispatchers.IO) {
-                    uris.mapNotNull { uri -> MediaFile.fromUri(appContext, uri) }
-                }
-                val details = withContext(Dispatchers.IO) {
-                    files.mapNotNull { file ->
-                        MediaInspector.inspect(appContext, file)?.let { file.uri.toString() to it }
-                    }.toMap()
+                    uris.mapNotNull { uri -> runCatching { MediaFile.fromUri(appContext, uri) }.getOrNull() }
                 }
                 technicalInfo.clear()
-                technicalInfo.putAll(details)
                 selectedFiles.clear()
                 selectedFiles.addAll(files)
+                mediaSearchQuery = ""
+                mediaKindFilter = MediaKindFilter.ALL
                 isError = files.isEmpty()
                 status = if (files.isEmpty()) {
                     "Vybrané soubory se nepodařilo načíst."
                 } else {
-                    "Připraveno ${files.size} souborů. Vyber televizi a spusť přehrávání."
+                    "Načteno ${files.size} souborů. Náhledy a technické údaje se připravují na pozadí."
                 }
+
+                files.chunked(3).forEach { batch ->
+                    val details = batch.map { file ->
+                        async(Dispatchers.IO) {
+                            runCatching {
+                                MediaInspector.inspect(appContext, file)?.let { file.uri.toString() to it }
+                            }.getOrNull()
+                        }
+                    }.awaitAll().filterNotNull()
+                    details.forEach { (uri, info) -> technicalInfo[uri] = info }
+                }
+                if (files.isNotEmpty()) status = "Připraveno ${files.size} souborů. Vyber televizi a spusť přehrávání."
             }
         }
     }
@@ -418,16 +441,47 @@ private fun PureCastScreen() {
                         Spacer(Modifier.weight(1f))
                         StatusTag("${selectedFiles.size} / 50", MaterialTheme.colorScheme.secondary)
                     }
+                    if (selectedFiles.isNotEmpty()) {
+                        OutlinedTextField(
+                            value = mediaSearchQuery,
+                            onValueChange = { mediaSearchQuery = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text("Hledat podle názvu") },
+                            placeholder = { Text("Např. dovolená nebo video") }
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = mediaKindFilter == MediaKindFilter.ALL,
+                                onClick = { mediaKindFilter = MediaKindFilter.ALL },
+                                label = { Text("Vše") }
+                            )
+                            FilterChip(
+                                selected = mediaKindFilter == MediaKindFilter.PHOTOS,
+                                onClick = { mediaKindFilter = MediaKindFilter.PHOTOS },
+                                label = { Text("Fotky") }
+                            )
+                            FilterChip(
+                                selected = mediaKindFilter == MediaKindFilter.VIDEOS,
+                                onClick = { mediaKindFilter = MediaKindFilter.VIDEOS },
+                                label = { Text("Videa") }
+                            )
+                        }
+                    }
                     if (selectedFiles.isEmpty()) {
                         EmptyState("Zatím tu nic není", "Vyber jednu nebo více fotek či videí a potom je odešli do televize.")
+                    } else if (visibleFiles.isEmpty()) {
+                        EmptyState("Nic nenalezeno", "Zkus upravit hledaný název nebo zvolit jiný filtr.")
                     } else {
-                        selectedFiles.forEach { file ->
+                        visibleFiles.forEach { file ->
                             Card(
                                 shape = RoundedCornerShape(15.dp),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                             ) {
                                 Column(modifier = Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
+                                        MediaThumbnail(file)
+                                        Spacer(Modifier.width(10.dp))
                                         Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), shape = RoundedCornerShape(11.dp)) {
                                             Text(
                                                 if (file.isImage) "FOTO" else if (file.isVideo) "VIDEO" else "SOUBOR",
@@ -653,6 +707,39 @@ private fun PureCastScreen() {
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MediaThumbnail(media: MediaFile) {
+    val context = LocalContext.current
+    val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = media.uri) {
+        value = withContext(Dispatchers.IO) {
+            MediaThumbnailLoader.load(context, media)
+        }
+    }
+    Box(
+        modifier = Modifier
+            .size(82.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap!!.asImageBitmap(),
+                contentDescription = media.displayName,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Text(
+                if (media.isVideo) "VIDEO" else if (media.isImage) "FOTO" else "SOUBOR",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
