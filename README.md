@@ -14,19 +14,22 @@ PureCast is an Android application for sending original photos and videos from p
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.3.0
+## Current implementation — 0.4.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
 - TV brand/platform detection from UPnP manufacturer, model and friendly-name information.
-- SSDP discovery for UPnP/DLNA MediaRenderer devices across common UPnP search targets.
+- SSDP discovery for UPnP/DLNA MediaRenderer devices across common UPnP search targets, preferring the active Wi-Fi route when multiple networks or VPNs are present.
 - Secure XML parsing and optional UPnP URLBase handling.
 - AVTransport play, pause, resume, stop, seek, playback-state and position queries.
 - ConnectionManager GetProtocolInfo parsing with conservative MIME-type compatibility reporting.
-- Local HTTP streaming of the original selected URI with byte-range support.
+- Local HTTP streaming of the original selected URI with byte-range support and Wi-Fi-first address selection.
 - TV browser fallback page with responsive playback UI and a basic HTML5 MIME support hint.
 - Foreground media-playback service to keep streaming active when the app is backgrounded or the display turns off.
 - Android Photo Picker with persistent URI permission when the provider supports it.
+- Image and video thumbnail previews, lazily loaded as gallery items become visible, with memory-conscious handling for older Android versions.
+- Gallery search by filename and photo/video filters.
+- Progressive technical metadata inspection in small batches, with cancellation when a new selection replaces the previous one.
 - Technical metadata inspection for image size and video resolution, frame rate, video/audio MIME codecs, bitrate, duration and available HDR transfer metadata.
 - Unit tests for HTTP range handling, UPnP time values, DLNA MIME profiles and sender/receiver brand classification.
 - GitHub Actions CI for unit tests, debug APK build and artifact upload.
