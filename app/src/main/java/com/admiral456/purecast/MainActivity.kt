@@ -180,6 +180,27 @@ private fun PureCastScreen() {
         }
     }
 
+    fun prepareBrowser(file: MediaFile) {
+        scope.launch {
+            busyLabel = file.displayName
+            isError = false
+            status = "Připravuji odkaz pro prohlížeč televize…"
+            try {
+                val streamUrl = withContext(Dispatchers.IO) { mediaServer.publish(file) }
+                browserUrl = mediaServer.browserPlayerUrl(streamUrl)
+                playingDevice = null
+                playingFile = file
+                transportInfo = null
+                status = "Odkaz pro TV prohlížeč je připraven. Otevři jej přímo na televizi."
+            } catch (error: Exception) {
+                isError = true
+                status = error.message ?: "Odkaz pro televizi se nepodařilo připravit."
+            } finally {
+                busyLabel = null
+            }
+        }
+    }
+
     fun runPlaybackAction(label: String, action: suspend (DlnaDevice) -> Unit) {
         val device = playingDevice ?: return
         scope.launch {
@@ -372,29 +393,41 @@ private fun PureCastScreen() {
                                         }
                                         TextButton(onClick = { selectedFiles.remove(file) }) { Text("Odebrat") }
                                     }
-                                    Button(
-                                        onClick = {
-                                            val device = activeDevice
-                                            if (device == null) {
-                                                isError = true
-                                                status = "Nejdříve vyber nebo vyhledej televizor."
-                                            } else {
-                                                playOn(device, file)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                        Button(
+                                            onClick = {
+                                                val device = activeDevice
+                                                if (device == null) {
+                                                    isError = true
+                                                    status = "Nejdříve vyber nebo vyhledej DLNA televizor."
+                                                } else {
+                                                    playOn(device, file)
+                                                }
+                                            },
+                                            enabled = activeDevice != null && busyLabel == null,
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(12.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                                        ) {
+                                            if (busyLabel == file.displayName) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.width(17.dp).height(17.dp),
+                                                    strokeWidth = 2.dp,
+                                                    color = MaterialTheme.colorScheme.onPrimary
+                                                )
+                                                Spacer(Modifier.width(7.dp))
                                             }
-                                        },
-                                        enabled = activeDevice != null && busyLabel == null,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp)
-                                    ) {
-                                        if (busyLabel == file.displayName) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.width(17.dp).height(17.dp),
-                                                strokeWidth = 2.dp,
-                                                color = MaterialTheme.colorScheme.onPrimary
-                                            )
-                                            Spacer(Modifier.width(8.dp))
+                                            Text("DLNA")
                                         }
-                                        Text("Přehrát v televizi")
+                                        OutlinedButton(
+                                            onClick = { prepareBrowser(file) },
+                                            enabled = busyLabel == null,
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(12.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                                        ) {
+                                            Text("Prohlížeč TV")
+                                        }
                                     }
                                 }
                             }
@@ -404,9 +437,9 @@ private fun PureCastScreen() {
             }
         }
 
-        if (playingDevice != null && playingFile != null) {
+        if (playingFile != null) {
             item {
-                SectionTitle("Přehrávání", "Ovládání se zobrazí, pokud jej televizor podporuje.")
+                SectionTitle("Přehrávání", "Vyber režim přehrávání podle možností své televize.")
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(22.dp),
@@ -414,7 +447,7 @@ private fun PureCastScreen() {
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(playingFile?.displayName.orEmpty(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text(playingDevice?.friendlyName.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(playingDevice?.friendlyName ?: "Režim prohlížeče televize", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
                                 onClick = { runPlaybackAction("Přehrávání pozastaveno.") { controller.pause(it) } },
@@ -458,7 +491,7 @@ private fun PureCastScreen() {
                                 error = it.status != "OK" && it.status != "UNKNOWN"
                             )
                         }
-                        browserUrl?.let { url ->
+                        }\n                        browserUrl?.let { url ->
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text("Záložní režim přes prohlížeč TV", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                                 Text(
