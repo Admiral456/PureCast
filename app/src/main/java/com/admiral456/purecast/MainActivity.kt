@@ -461,6 +461,9 @@ private fun PureCastScreen() {
         sharedCredentials = null
         sharedSnapshot = null
         sharedSyncError = null
+        if (playingFile == null) {
+            PureCastPlaybackService.stop(appContext)
+        }
         status = "Odpojil ses od sdílené fronty."
     }
 
@@ -1257,7 +1260,7 @@ private fun PureCastScreen() {
                                 onClick = {
                                     runPlaybackAction("Přehrávání zastaveno.") {
                                         controller.stop(it)
-                                        PureCastPlaybackService.stop(appContext)
+                                        if (sharedCredentials == null) PureCastPlaybackService.stop(appContext)
                                         playingFile = null
                                         playingTitle = null
                                         playingSharedEntryId = null
