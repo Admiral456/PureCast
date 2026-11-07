@@ -81,6 +81,7 @@ import com.admiral456.purecast.media.MediaKindFilter
 import com.admiral456.purecast.media.MediaLibraryFilter
 import com.admiral456.purecast.media.MediaThumbnailLoader
 import com.admiral456.purecast.media.MediaTechnicalInfo
+import com.admiral456.purecast.playback.PlaybackQueueLogic
 import com.admiral456.purecast.playback.PureCastPlaybackService
 import com.admiral456.purecast.playback.PureCastRuntime
 import java.util.Locale
@@ -138,6 +139,8 @@ private fun PureCastScreen() {
     var devices by remember { mutableStateOf<List<DlnaDevice>>(emptyList()) }
     var selectedDeviceId by remember { mutableStateOf<String?>(null) }
     val selectedFiles = remember { mutableStateListOf<MediaFile>() }
+    val playbackQueue = remember { mutableStateListOf<MediaFile>() }
+    var queueCurrentIndex by remember { mutableStateOf(-1) }
     val technicalInfo = remember { mutableStateMapOf<String, MediaTechnicalInfo>() }
     var mediaInspectionJob by remember { mutableStateOf<Job?>(null) }
     var mediaSearchQuery by remember { mutableStateOf("") }
@@ -204,6 +207,13 @@ private fun PureCastScreen() {
     }
 
     fun playOn(device: DlnaDevice, file: MediaFile) {
+        val existingQueueIndex = playbackQueue.indexOfFirst { it.uri == file.uri }
+        if (existingQueueIndex < 0) {
+            playbackQueue.add(file)
+            queueCurrentIndex = playbackQueue.lastIndex
+        } else {
+            queueCurrentIndex = existingQueueIndex
+        }
         scope.launch {
             busyLabel = file.displayName
             isError = false
@@ -240,6 +250,68 @@ private fun PureCastScreen() {
                 busyLabel = null
             }
         }
+    }
+
+    fun addToQueue(file: MediaFile) {
+        if (playbackQueue.any { it.uri == file.uri }) {
+            status = "${file.displayName} už ve frontě je."
+            return
+        }
+        playbackQueue.add(file)
+        status = "Přidáno do fronty: ${file.displayName}"
+        isError = false
+    }
+
+    fun removeFromQueue(index: Int) {
+        if (index !in playbackQueue.indices) return
+        playbackQueue.removeAt(index)
+        queueCurrentIndex = PlaybackQueueLogic.indexAfterRemoval(
+            queueCurrentIndex,
+            index,
+            playbackQueue.size
+        )
+    }
+
+    fun moveQueueItem(fromIndex: Int, toIndex: Int) {
+        if (fromIndex !in playbackQueue.indices || toIndex !in playbackQueue.indices || fromIndex == toIndex) return
+        val item = playbackQueue.removeAt(fromIndex)
+        playbackQueue.add(toIndex, item)
+        queueCurrentIndex = PlaybackQueueLogic.indexAfterMove(
+            queueCurrentIndex,
+            fromIndex,
+            toIndex,
+            playbackQueue.size
+        )
+    }
+
+    fun playQueueItem(index: Int) {
+        val file = playbackQueue.getOrNull(index) ?: return
+        val device = activeDevice
+        if (device == null) {
+            isError = true
+            status = "Pro přehrání fronty nejdříve vyber DLNA televizor."
+            return
+        }
+        queueCurrentIndex = index
+        playOn(device, file)
+    }
+
+    fun playNextQueueItem() {
+        val nextIndex = PlaybackQueueLogic.nextIndex(queueCurrentIndex, playbackQueue.size)
+        if (nextIndex == null) {
+            status = "Fronta přehrávání je prázdná."
+            return
+        }
+        playQueueItem(nextIndex)
+    }
+
+    fun playPreviousQueueItem() {
+        val previousIndex = PlaybackQueueLogic.previousIndex(queueCurrentIndex, playbackQueue.size)
+        if (previousIndex == null) {
+            status = "Fronta přehrávání je prázdná."
+            return
+        }
+        playQueueItem(previousIndex)
     }
 
     fun prepareBrowser(file: MediaFile) {
@@ -513,6 +585,8 @@ private fun PureCastScreen() {
                                                             onClick = {
                                                                 selectedFiles.remove(file)
                                                                 technicalInfo.remove(file.uri.toString())
+                                                                val queuedIndex = playbackQueue.indexOfFirst { it.uri == file.uri }
+                                                                if (queuedIndex >= 0) removeFromQueue(queuedIndex)
                                                             },
                                                             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
                                                         ) { Text("Odebrat") }
@@ -586,6 +660,13 @@ private fun PureCastScreen() {
                                                 ) {
                                                     Text("Prohlížeč TV")
                                                 }
+                                            TextButton(
+                                                onClick = { addToQueue(file) },
+                                                enabled = playbackQueue.none { it.uri == file.uri },
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Text(if (playbackQueue.any { it.uri == file.uri }) "✓ Ve frontě" else "＋ Přidat do fronty")
+                                            }
                                             }
                                         }
                                     }
