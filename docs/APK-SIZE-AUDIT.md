@@ -1,4 +1,4 @@
-# Audit velikosti APK — PureCast 0.8.0
+# Audit velikosti APK — PureCast 0.9.0
 
 Měření pochází z finálního běhu GitHub Actions:
 https://github.com/Admiral456/PureCast/actions/runs/42418890210
@@ -43,3 +43,8 @@ Tento smoke test potvrzuje přítomnost kritických částí v balíčku, nikoli
 ## Doporučení
 
 Pro běžné instalování použij `PureCast-release-apk` (R8). Pro porovnání velikosti nebo diagnostiku použij `PureCast-full-apk` (unminified). `PureCast-debug-apk` je vývojářská varianta a není vhodná jako běžná distribuční verze.
+
+
+## Jediný distribuovaný soubor
+
+Od verze 0.9.0 workflow nahrává pouze jeden instalační balíček s názvem `PureCast-Android`. Uvnitř je samostatný `PureCast.apk`, zvolený z plnohodnotné unminified release varianty. Debug a R8 APK se sestavují a ověřují pouze interně, ale nejsou dalšími uživatelskými downloady. K instalaci není potřeba žádná doprovodná aplikace ani data balíček.
