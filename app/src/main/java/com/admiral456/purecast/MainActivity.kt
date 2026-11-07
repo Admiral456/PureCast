@@ -44,6 +44,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.produceState
@@ -84,6 +85,7 @@ import com.admiral456.purecast.playback.PureCastPlaybackService
 import com.admiral456.purecast.playback.PureCastRuntime
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
@@ -137,6 +139,7 @@ private fun PureCastScreen() {
     var selectedDeviceId by remember { mutableStateOf<String?>(null) }
     val selectedFiles = remember { mutableStateListOf<MediaFile>() }
     val technicalInfo = remember { mutableStateMapOf<String, MediaTechnicalInfo>() }
+    var mediaInspectionJob by remember { mutableStateOf<Job?>(null) }
     var mediaSearchQuery by remember { mutableStateOf("") }
     var mediaKindFilter by remember { mutableStateOf(MediaKindFilter.ALL) }
     val visibleFiles = MediaLibraryFilter.filter(selectedFiles, mediaSearchQuery, mediaKindFilter)
@@ -168,7 +171,8 @@ private fun PureCastScreen() {
                     // Some picker implementations do not offer persistable grants.
                 }
             }
-            scope.launch {
+            mediaInspectionJob?.cancel()
+            mediaInspectionJob = scope.launch {
                 val files = withContext(Dispatchers.IO) {
                     uris.mapNotNull { uri -> runCatching { MediaFile.fromUri(appContext, uri) }.getOrNull() }
                 }
@@ -747,6 +751,13 @@ private fun MediaThumbnail(media: MediaFile) {
     val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = media.uri) {
         value = withContext(Dispatchers.IO) {
             MediaThumbnailLoader.load(context, media)
+        }
+    }
+    DisposableEffect(bitmap) {
+        onDispose {
+            bitmap?.let { thumbnail ->
+                if (!thumbnail.isRecycled) thumbnail.recycle()
+            }
         }
     }
     Box(
