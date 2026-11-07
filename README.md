@@ -14,7 +14,7 @@ PureCast is an Android application for sending original photos and videos from p
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.6.0
+## Current implementation — 0.7.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
@@ -32,7 +32,8 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - Progressive technical metadata inspection in small batches, with cancellation when a new selection replaces the previous one.
 - Technical metadata inspection for image size and video resolution, frame rate, video/audio MIME codecs, bitrate, duration and available HDR transfer metadata.
 - Unit tests for HTTP range handling, UPnP time values, DLNA MIME profiles and sender/receiver brand classification.
-- GitHub Actions CI for unit tests, debug APK build and artifact upload.
+- GitHub Actions CI for unit tests, debug APK and optimized R8 release APK builds, and separate artifact uploads.
+- Release build removes unused code and resources. Compose UI Tooling is not packaged into the app because this project does not use it at runtime.
 
 ## Shared queue requirements and limitations
 
@@ -62,14 +63,14 @@ Samsung Smart TVs from 2016 onward use the Tizen platform, but codec and media s
 Open this repository in Android Studio and sync the Gradle project, or run:
 
 ```bash
-gradle :app:testDebugUnitTest :app:assembleDebug
+gradle :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease
 ```
 
-The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
+The installable debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`. The smaller, R8-optimized release APK is written to `app/build/outputs/apk/release/app-release.apk`. CI signs the release APK with its temporary debug certificate for sideload testing; this is not a Play Store signing key.
 
 ## Download
 
-The latest successful build is available from [GitHub Actions artifacts](https://github.com/Admiral456/PureCast/actions). Open the newest successful **Android CI** run and download `PureCast-debug-apk`. The ZIP contains `app-debug.apk`.
+The latest successful build is available from [GitHub Actions artifacts](https://github.com/Admiral456/PureCast/actions). Download `PureCast-release-apk` for the smaller R8-optimized installation build, or `PureCast-debug-apk` for an unminified diagnostic build.
 
 ## Quality and compatibility notes
 
