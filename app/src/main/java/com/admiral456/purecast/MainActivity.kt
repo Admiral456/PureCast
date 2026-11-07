@@ -660,6 +660,7 @@ private fun PureCastScreen() {
                                                 ) {
                                                     Text("Prohlížeč TV")
                                                 }
+                                            }
                                             TextButton(
                                                 onClick = { addToQueue(file) },
                                                 enabled = playbackQueue.none { it.uri == file.uri },
@@ -671,6 +672,106 @@ private fun PureCastScreen() {
                                         }
                                     }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (playbackQueue.isNotEmpty()) {
+            item {
+                SectionTitle("Fronta přehrávání", "Připrav si pořadí médií a přepínej mezi nimi bez nového výběru.")
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "${playbackQueue.size} položek",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(Modifier.weight(1f))
+                            TextButton(onClick = {
+                                playbackQueue.clear()
+                                queueCurrentIndex = -1
+                            }) { Text("Vymazat frontu") }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { playQueueItem(0) },
+                                enabled = activeDevice != null && busyLabel == null,
+                                modifier = Modifier.weight(1f)
+                            ) { Text("Přehrát od začátku") }
+                            OutlinedButton(
+                                onClick = { playNextQueueItem() },
+                                enabled = activeDevice != null && busyLabel == null,
+                                modifier = Modifier.weight(1f)
+                            ) { Text("Další") }
+                        }
+                        playbackQueue.forEachIndexed { index, queuedFile ->
+                            Card(
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (index == queueCurrentIndex)
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.09f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        StatusTag((index + 1).toString(), MaterialTheme.colorScheme.secondary)
+                                        Spacer(Modifier.width(8.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                queuedFile.displayName,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                if (index == queueCurrentIndex) "Právě vybráno k přehrávání" else
+                                                    "${queuedFile.mimeType} · ${formatSize(queuedFile.sizeBytes)}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        TextButton(
+                                            onClick = { playQueueItem(index) },
+                                            enabled = activeDevice != null && busyLabel == null,
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                        ) { Text("Přehrát") }
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        TextButton(
+                                            onClick = { moveQueueItem(index, index - 1) },
+                                            enabled = index > 0
+                                        ) { Text("↑ Nahoru") }
+                                        TextButton(
+                                            onClick = { moveQueueItem(index, index + 1) },
+                                            enabled = index < playbackQueue.lastIndex
+                                        ) { Text("↓ Dolů") }
+                                        Spacer(Modifier.weight(1f))
+                                        TextButton(onClick = { removeFromQueue(index) }) { Text("Odebrat") }
+                                    }
+                                }
+                            }
+                        }
+                        if (playingDevice == null && playingFile != null) {
+                            Text(
+                                "Přehrávání přes TV prohlížeč nelze z telefonu dálkově přepínat. Frontu můžeš připravit, ale pro ovládání Další/Předchozí použij DLNA režim.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -689,6 +790,20 @@ private fun PureCastScreen() {
                         Text(playingFile?.displayName.orEmpty(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(playingDevice?.friendlyName ?: "Režim prohlížeče televize", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (playingDevice != null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { playPreviousQueueItem() },
+                                enabled = busyLabel == null && queueCurrentIndex >= 0 && playbackQueue.size > 1,
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                            ) { Text("Předchozí") }
+                            OutlinedButton(
+                                onClick = { playNextQueueItem() },
+                                enabled = busyLabel == null && playbackQueue.isNotEmpty(),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                            ) { Text("Další") }
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
                                 onClick = { runPlaybackAction("Přehrávání pozastaveno.") { controller.pause(it) } },
