@@ -1,58 +1,37 @@
 package com.admiral456.purecast.media
 
-import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MediaLibraryFilterTest {
     @Test
     fun filtersByNameCaseInsensitively() {
-        val media = listOf(
-            sample("holiday-video.mp4", "video/mp4"),
-            sample("family-photo.jpg", "image/jpeg")
-        )
-        assertEquals(
-            listOf("holiday-video.mp4"),
-            MediaLibraryFilter.filter(media, "HOLIDAY", MediaKindFilter.ALL).map { it.displayName }
-        )
+        assertTrue(MediaLibraryFilter.matches("holiday-video.mp4", "video/mp4", "HOLIDAY", MediaKindFilter.ALL))
+        assertFalse(MediaLibraryFilter.matches("family-photo.jpg", "image/jpeg", "HOLIDAY", MediaKindFilter.ALL))
     }
 
     @Test
     fun filtersOnlyImages() {
-        val media = listOf(
-            sample("video.mp4", "video/mp4"),
-            sample("photo.jpg", "image/jpeg")
-        )
-        assertEquals(
-            listOf("photo.jpg"),
-            MediaLibraryFilter.filter(media, "", MediaKindFilter.PHOTOS).map { it.displayName }
-        )
+        assertTrue(MediaLibraryFilter.matches("photo.jpg", "image/jpeg", "", MediaKindFilter.PHOTOS))
+        assertFalse(MediaLibraryFilter.matches("video.mp4", "video/mp4", "", MediaKindFilter.PHOTOS))
     }
 
     @Test
     fun filtersOnlyVideos() {
-        val media = listOf(
-            sample("video.mp4", "video/mp4"),
-            sample("photo.jpg", "image/jpeg")
-        )
-        assertEquals(
-            listOf("video.mp4"),
-            MediaLibraryFilter.filter(media, "", MediaKindFilter.VIDEOS).map { it.displayName }
-        )
+        assertTrue(MediaLibraryFilter.matches("video.mp4", "video/mp4", "", MediaKindFilter.VIDEOS))
+        assertFalse(MediaLibraryFilter.matches("photo.jpg", "image/jpeg", "", MediaKindFilter.VIDEOS))
     }
 
     @Test
     fun combinesSearchAndKindFilter() {
-        val media = listOf(
-            sample("holiday-video.mp4", "video/mp4"),
-            sample("holiday-photo.jpg", "image/jpeg"),
-            sample("work-video.mp4", "video/mp4")
-        )
-        assertEquals(
-            listOf("holiday-video.mp4"),
-            MediaLibraryFilter.filter(media, "holiday", MediaKindFilter.VIDEOS).map { it.displayName }
-        )
+        assertTrue(MediaLibraryFilter.matches("holiday-video.mp4", "video/mp4", "holiday", MediaKindFilter.VIDEOS))
+        assertFalse(MediaLibraryFilter.matches("holiday-photo.jpg", "image/jpeg", "holiday", MediaKindFilter.VIDEOS))
+        assertFalse(MediaLibraryFilter.matches("work-video.mp4", "video/mp4", "holiday", MediaKindFilter.VIDEOS))
     }
 
-    private fun sample(name: String, mime: String) =
-        MediaFile(android.net.Uri.parse("content://test/$name"), name, mime, 100L)
+    @Test
+    fun blankSearchMatchesEveryItemInSelectedKind() {
+        assertTrue(MediaLibraryFilter.matches("photo.jpg", "image/jpeg", "   ", MediaKindFilter.ALL))
+    }
 }
