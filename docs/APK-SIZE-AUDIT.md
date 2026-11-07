@@ -36,13 +36,13 @@ Před nahráním APK automatický skript kontroluje, že balíček obsahuje hlav
 - DLNA příkazy `SetAVTransportURI`, `GetPositionInfo` a `GetTransportInfo`,
 - českou obrazovku galerie, sdílené fronty a základní ovládání přehrávání.
 
-CI dále vytváří a nahrává R8 audit: `mapping.txt`, `usage.txt`, `seeds.txt`, `resources.txt` a `configuration.txt`. Mapa ukazuje, jak R8 přejmenoval a zmenšil třídy; usage report ukazuje odstraněné nebo optimalizované členy. Důležité třídy DLNA, lokálního serveru, skupinové fronty a přehrávací služby jsou v mapě zachované (některé pod zkrácenými názvy).
+CI vytváří R8 mapu a usage report pro interní kontrolu, ale nepublikuje je jako další uživatelské stažení. Mapa ukazuje, jak R8 přejmenoval a zmenšil třídy; usage report ukazuje odstraněné nebo optimalizované členy. Důležité funkce se ověřují také samostatným smoke testem na výsledném APK.
 
 Tento smoke test potvrzuje přítomnost kritických částí v balíčku, nikoli skutečné přehrání na fyzickém telefonu nebo televizi. To je potřeba ověřit samostatným hardwarovým testem.
 
 ## Doporučení
 
-Pro běžné instalování použij `PureCast-release-apk` (R8). Pro porovnání velikosti nebo diagnostiku použij `PureCast-full-apk` (unminified). `PureCast-debug-apk` je vývojářská varianta a není vhodná jako běžná distribuční verze.
+Pro instalaci použij jediný artifact `PureCast-Android`, který obsahuje `PureCast.apk`. Interní debug a R8 varianty nejsou samostatné uživatelské downloady.
 
 
 ## Jediný distribuovaný soubor
