@@ -448,6 +448,7 @@ private fun PureCastScreen() {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(playingFile?.displayName.orEmpty(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(playingDevice?.friendlyName ?: "Režim prohlížeče televize", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (playingDevice != null) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
                                 onClick = { runPlaybackAction("Přehrávání pozastaveno.") { controller.pause(it) } },
@@ -491,7 +492,9 @@ private fun PureCastScreen() {
                                 error = it.status != "OK" && it.status != "UNKNOWN"
                             )
                         }
-                        }\n                        browserUrl?.let { url ->
+                        }
+                        }
+                        browserUrl?.let { url ->
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text("Záložní režim přes prohlížeč TV", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                                 Text(
