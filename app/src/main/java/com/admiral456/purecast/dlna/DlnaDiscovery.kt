@@ -62,7 +62,7 @@ class DlnaDiscovery(context: Context) {
             if (multicastLock.isHeld) multicastLock.release()
         }
 
-        locations.mapNotNull(::loadRendererDescription).distinctBy { it.id }
+        return locations.mapNotNull(::loadRendererDescription).distinctBy { it.id }
     }
 
     private fun loadRendererDescription(location: String): DlnaDevice? {
