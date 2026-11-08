@@ -16,18 +16,23 @@ object RangeParser {
         if (parts.size != 2) return null
 
         return if (parts[0].isBlank()) {
-            val suffixLength = parts[1].toLongOrNull() ?: return null
+            val suffixLength = parseUnsignedDecimal(parts[1]) ?: return null
             if (suffixLength <= 0L) return null
             val start = (totalLength - suffixLength).coerceAtLeast(0L)
             ByteRange(start, totalLength - 1L)
         } else {
-            val start = parts[0].toLongOrNull() ?: return null
+            val start = parseUnsignedDecimal(parts[0]) ?: return null
             if (start < 0L || start >= totalLength) return null
             val requestedEnd = if (parts[1].isBlank()) totalLength - 1L else {
-                parts[1].toLongOrNull() ?: return null
+                parseUnsignedDecimal(parts[1]) ?: return null
             }
             if (requestedEnd < start) return null
             ByteRange(start, requestedEnd.coerceAtMost(totalLength - 1L))
         }
+    }
+
+    private fun parseUnsignedDecimal(value: String): Long? {
+        if (value.isEmpty() || value.any { it !in '0'..'9' }) return null
+        return value.toLongOrNull()
     }
 }
