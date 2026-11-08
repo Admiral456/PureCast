@@ -31,7 +31,10 @@
 - [x] Add adaptive, round and monochrome PureCast launcher icons, verified inside the APK.
 - [x] Add an extension-to-MIME catalog for modern web formats, HEIF/HEIC, AVIF, JPEG XL, TIFF, SVG, JPEG 2000 and camera RAW.
 - [x] Add Android document picker for less common image formats alongside Photo Picker.
-- [x] Use bounded Android ImageDecoder thumbnails and dimensions for platform-supported formats.
+- [x] Use bounded Android ImageDecoder thumbnails and dimensions for platform-supported formats, with BitmapFactory fallback.
+- [x] Normalize MIME types and DLNA protocolInfo parameters before compatibility checks.
+- [x] Add actual image load/error feedback and decoded dimensions to the TV-browser player.
+- [x] Skip non-image and non-video documents from the document picker.
 
 ## Milestone 1 — Samsung and LG real-device interoperability
 
