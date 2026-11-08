@@ -226,9 +226,8 @@ private fun PureCastScreen() {
             } else {
                 MAX_SELECTED_MEDIA
             }
-            val files = importedFiles
-                .filterNot { it.uri in existingUris }
-                .take(availableSlots)
+            val uniqueFiles = importedFiles.filterNot { it.uri in existingUris }
+            val files = uniqueFiles.take(availableSlots)
 
             if (!appendToLibrary) {
                 technicalInfo.clear()
@@ -237,12 +236,12 @@ private fun PureCastScreen() {
             selectedFiles.addAll(files)
             mediaSearchQuery = ""
             mediaKindFilter = MediaKindFilter.ALL
-            isError = files.isEmpty()
+            isError = importedFiles.isEmpty() || (files.isEmpty() && availableSlots == 0)
             status = when {
-                files.isEmpty() && importedFiles.isEmpty() -> "Vybrané soubory se nepodařilo načíst."
+                importedFiles.isEmpty() -> "Vybrané soubory se nepodařilo načíst."
                 files.isEmpty() && availableSlots == 0 -> "Knihovna už obsahuje maximum $MAX_SELECTED_MEDIA souborů."
                 files.isEmpty() -> "Vybrané soubory už v knihovně jsou."
-                importedFiles.size > files.size ->
+                uniqueFiles.size > files.size ->
                     "Přidáno ${files.size} souborů. Knihovna podporuje nejvýše $MAX_SELECTED_MEDIA položek."
                 else -> "Načteno ${files.size} souborů. Náhledy a technické údaje se připravují na pozadí."
             }
@@ -817,7 +816,7 @@ private fun PureCastScreen() {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Vybrané soubory", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.weight(1f))
-                        StatusTag("${selectedFiles.size} / 50", MaterialTheme.colorScheme.secondary)
+                        StatusTag("${selectedFiles.size} / $MAX_SELECTED_MEDIA", MaterialTheme.colorScheme.secondary)
                     }
                     if (selectedFiles.isNotEmpty()) {
                         OutlinedTextField(
