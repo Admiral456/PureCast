@@ -419,8 +419,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
         if (slash <= 0 || slash != normalized.lastIndexOf('/')) return "application/octet-stream"
         val valid = normalized.indices.all { index ->
             index == slash || normalized[index].isLetterOrDigit() ||
-                normalized[index] in "!#    private fun safeHeaderValue(value: String): String =
-        value.replace("\r", "").replace("\n", "").ifBlank { "application/octet-stream" }^_.+-"
+                normalized[index] in "!#&^_.+-"
         }
         return if (valid) normalized else "application/octet-stream"
     }
