@@ -189,7 +189,7 @@ private fun PureCastScreen() {
                 val latest = if (credentials.isHost) {
                     groupServer?.snapshot()
                 } else {
-                    withContext(Dispatchers.IO) { GroupQueueClient.getState(credentials) }
+                    withContext(Dispatchers.IO) { GroupQueueClient.getState(credentials, appContext) }
                 }
                 if (latest != null) sharedSnapshot = latest
                 sharedSyncError = null
@@ -436,7 +436,8 @@ private fun PureCastScreen() {
                 val server = withContext(Dispatchers.IO) {
                     GroupQueueServer(
                         appContext,
-                        "${senderInfo.brand.displayName} ${senderInfo.model}"
+                        "${senderInfo.brand.displayName} ${senderInfo.model}",
+                        appContext
                     ).also { it.start() }
                 }
                 groupServer = server
@@ -488,7 +489,7 @@ private fun PureCastScreen() {
         if (credentials != null && !credentials.isHost) {
             scope.launch {
                 runCatching {
-                    withContext(Dispatchers.IO) { GroupQueueClient.leave(credentials) }
+                    withContext(Dispatchers.IO) { GroupQueueClient.leave(credentials, appContext) }
                 }
             }
         }
@@ -514,7 +515,7 @@ private fun PureCastScreen() {
                     PureCastRuntime.getMediaServer(appContext).publish(file)
                 }
                 val latest = withContext(Dispatchers.IO) {
-                    GroupQueueClient.add(credentials, file.displayName, file.mimeType, mediaUrl, file.sizeBytes)
+                    GroupQueueClient.add(credentials, file.displayName, file.mimeType, mediaUrl, file.sizeBytes, appContext)
                 }
                 sharedSnapshot = latest
                 status = "Přidáno do sdílené fronty: ${file.displayName}"
@@ -556,7 +557,7 @@ private fun PureCastScreen() {
                 positionInfo = null
                 seekPreviewSeconds = 0f
                 val latest = withContext(Dispatchers.IO) {
-                    GroupQueueClient.setCurrent(credentials, entry.id)
+                    GroupQueueClient.setCurrent(credentials, entry.id, appContext)
                 }
                 sharedSnapshot = latest
                 status = "Do televize byl odeslán originální soubor „${entry.title}“ od ${entry.senderName}."
@@ -576,7 +577,7 @@ private fun PureCastScreen() {
             sharedBusy = true
             try {
                 sharedSnapshot = withContext(Dispatchers.IO) {
-                    GroupQueueClient.move(credentials, fromIndex, toIndex)
+                    GroupQueueClient.move(credentials, fromIndex, toIndex, appContext)
                 }
             } catch (error: Exception) {
                 sharedSyncError = error.message ?: "Pořadí sdílené fronty se nepodařilo změnit."
@@ -593,7 +594,7 @@ private fun PureCastScreen() {
             sharedBusy = true
             try {
                 sharedSnapshot = withContext(Dispatchers.IO) {
-                    GroupQueueClient.remove(credentials, entry.id)
+                    GroupQueueClient.remove(credentials, entry.id, appContext)
                 }
             } catch (error: Exception) {
                 sharedSyncError = error.message ?: "Položku sdílené fronty se nepodařilo odebrat."
