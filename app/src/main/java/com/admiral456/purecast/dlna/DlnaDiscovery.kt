@@ -89,8 +89,11 @@ class DlnaDiscovery(context: Context) {
 
     private fun loadRendererDescription(location: String, network: Network?): DlnaDevice? {
         val url = URL(location)
-        val connection = (network?.let { runCatching { it.openConnection(url) }.getOrNull() }
-            ?: url.openConnection()) as java.net.HttpURLConnection
+        val connection = try {
+            (if (network != null) network.openConnection(url) else url.openConnection()) as java.net.HttpURLConnection
+        } catch (_: Exception) {
+            return null
+        }
         connection.connectTimeout = 4_000
         connection.readTimeout = 4_000
         connection.requestMethod = "GET"
