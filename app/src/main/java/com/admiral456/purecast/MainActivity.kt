@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,6 +37,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
@@ -83,6 +86,7 @@ import com.admiral456.purecast.media.MediaFile
 import com.admiral456.purecast.media.MediaInspector
 import com.admiral456.purecast.media.MediaKindFilter
 import com.admiral456.purecast.media.MediaLibraryFilter
+import com.admiral456.purecast.media.MediaLibrarySort
 import com.admiral456.purecast.media.MediaThumbnailLoader
 import com.admiral456.purecast.media.MediaTechnicalInfo
 import com.admiral456.purecast.media.MediaStoreGallery
@@ -168,7 +172,17 @@ private fun PureCastScreen() {
     var mediaInspectionJob by remember { mutableStateOf<Job?>(null) }
     var mediaSearchQuery by remember { mutableStateOf("") }
     var mediaKindFilter by remember { mutableStateOf(MediaKindFilter.ALL) }
-    val visibleFiles = MediaLibraryFilter.filter(selectedFiles, mediaSearchQuery, mediaKindFilter)
+    var mediaSort by remember { mutableStateOf(MediaLibrarySort.NEWEST) }
+    var selectedAlbum by remember { mutableStateOf<String?>(null) }
+    var showSortMenu by remember { mutableStateOf(false) }
+    val availableAlbums = MediaLibraryFilter.albums(selectedFiles)
+    val visibleFiles = MediaLibraryFilter.apply(
+        selectedFiles,
+        mediaSearchQuery,
+        mediaKindFilter,
+        mediaSort,
+        selectedAlbum
+    )
     var isScanning by remember { mutableStateOf(false) }
     var galleryAccess by remember { mutableStateOf(GalleryAccessPolicy.read(appContext)) }
     var showGalleryAccessExplanation by remember { mutableStateOf(false) }
@@ -242,6 +256,7 @@ private fun PureCastScreen() {
             if (!appendToLibrary) {
                 technicalInfo.clear()
                 selectedFiles.clear()
+                selectedAlbum = null
             }
             selectedFiles.addAll(files)
             mediaSearchQuery = ""
@@ -1006,6 +1021,58 @@ private fun PureCastScreen() {
                                 onClick = { mediaKindFilter = MediaKindFilter.VIDEOS },
                                 label = { Text("Videa") }
                             )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Seřadit:", style = MaterialTheme.typography.labelLarge)
+                            Box {
+                                TextButton(onClick = { showSortMenu = true }) {
+                                    Text(mediaSort.label)
+                                }
+                                DropdownMenu(
+                                    expanded = showSortMenu,
+                                    onDismissRequest = { showSortMenu = false }
+                                ) {
+                                    MediaLibrarySort.values().forEach { option ->
+                                        DropdownMenuItem(
+                                            text = { Text(option.label) },
+                                            onClick = {
+                                                mediaSort = option
+                                                showSortMenu = false
+                                            },
+                                            trailingIcon = {
+                                                if (mediaSort == option) {
+                                                    Text("✓", color = MaterialTheme.colorScheme.primary)
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                "${visibleFiles.size} položek",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (availableAlbums.isNotEmpty()) {
+                            Text("Alba", style = MaterialTheme.typography.labelLarge)
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                item(key = "__all_albums__") {
+                                    FilterChip(
+                                        selected = selectedAlbum == null,
+                                        onClick = { selectedAlbum = null },
+                                        label = { Text("Všechna alba") }
+                                    )
+                                }
+                                items(availableAlbums, key = { it.lowercase() }) { album ->
+                                    FilterChip(
+                                        selected = selectedAlbum.equals(album, ignoreCase = true),
+                                        onClick = { selectedAlbum = album },
+                                        label = { Text(album, maxLines = 1) }
+                                    )
+                                }
+                            }
                         }
                     }
                     if (selectedFiles.isEmpty()) {
