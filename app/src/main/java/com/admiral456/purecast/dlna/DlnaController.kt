@@ -2,6 +2,7 @@ package com.admiral456.purecast.dlna
 
 import android.content.Context
 import com.admiral456.purecast.network.WifiNetworkResolver
+import com.admiral456.purecast.network.readTextLimited
 import com.admiral456.purecast.media.MediaFile
 import java.net.HttpURLConnection
 import java.net.URL
@@ -155,9 +156,9 @@ class DlnaController(private val context: Context? = null) {
             connection.outputStream.use { it.write(envelope.toByteArray(Charsets.UTF_8)) }
             val code = connection.responseCode
             val response = if (code in 200..299) {
-                connection.inputStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                connection.inputStream?.use { it.readTextLimited(MAX_SOAP_RESPONSE_BYTES) }.orEmpty()
             } else {
-                connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                connection.errorStream?.use { it.readTextLimited(MAX_SOAP_RESPONSE_BYTES) }.orEmpty()
             }
             if (code !in 200..299) {
                 val fault = response.replace(Regex("<[^>]+>"), " ")
@@ -186,3 +187,6 @@ class DlnaController(private val context: Context? = null) {
         value.replace("&", "&amp;").replace("<", "&lt;")
             .replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
 }
+
+
+private const val MAX_SOAP_RESPONSE_BYTES = 1_048_576
