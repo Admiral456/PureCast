@@ -71,22 +71,27 @@ object MediaThumbnailLoader {
     ): Bitmap? {
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                val source = ImageDecoder.createSource(context.contentResolver, media.uri)
-                return ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
-                    val sourceWidth = info.size.width.coerceAtLeast(1)
-                    val sourceHeight = info.size.height.coerceAtLeast(1)
-                    val scale = minOf(
-                        1f,
-                        targetWidth.toFloat() / sourceWidth,
-                        targetHeight.toFloat() / sourceHeight
-                    )
-                    decoder.setTargetSize(
-                        (sourceWidth * scale).roundToInt().coerceAtLeast(1),
-                        (sourceHeight * scale).roundToInt().coerceAtLeast(1)
-                    )
-                }.fitInside(targetWidth, targetHeight)
+                val modernThumbnail = runCatching {
+                    val source = ImageDecoder.createSource(context.contentResolver, media.uri)
+                    ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                        val sourceWidth = info.size.width.coerceAtLeast(1)
+                        val sourceHeight = info.size.height.coerceAtLeast(1)
+                        val scale = minOf(
+                            1f,
+                            targetWidth.toFloat() / sourceWidth,
+                            targetHeight.toFloat() / sourceHeight
+                        )
+                        decoder.setTargetSize(
+                            (sourceWidth * scale).roundToInt().coerceAtLeast(1),
+                            (sourceHeight * scale).roundToInt().coerceAtLeast(1)
+                        )
+                    }
+                }.getOrNull()
+                if (modernThumbnail != null) return modernThumbnail.fitInside(targetWidth, targetHeight)
             }
 
+            // Fall back to BitmapFactory for formats handled by legacy decoders
+            // when ImageDecoder cannot create a preview on this device.
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             context.contentResolver.openInputStream(media.uri)?.use {
                 BitmapFactory.decodeStream(it, null, bounds)
