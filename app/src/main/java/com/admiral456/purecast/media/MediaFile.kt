@@ -4,12 +4,15 @@ import android.content.Context
 import android.net.Uri
 import android.webkit.MimeTypeMap
 import android.provider.OpenableColumns
+import android.provider.MediaStore
 
 data class MediaFile(
     val uri: Uri,
     val displayName: String,
     val mimeType: String,
-    val sizeBytes: Long?
+    val sizeBytes: Long?,
+    val dateModifiedMillis: Long? = null,
+    val albumName: String? = null
 ) {
     val isImage: Boolean get() = ImageFormatCatalog.isImageMimeType(mimeType)
     val isVideo: Boolean get() = mimeType.substringBefore(';').trim().startsWith("video/", ignoreCase = true)
@@ -48,6 +51,39 @@ data class MediaFile(
                 }
             }
 
+            var dateModifiedMillis: Long? = null
+            var albumName: String? = null
+            val metadataProjection = arrayOf(
+                MediaStore.MediaColumns.DATE_MODIFIED,
+                MediaStore.Images.ImageColumns.BUCKET_DISPLAY_NAME
+            )
+            val metadataCursor = runCatching {
+                resolver.query(uri, metadataProjection, null, null, null)
+            }.getOrNull() ?: runCatching {
+                resolver.query(
+                    uri,
+                    arrayOf(MediaStore.MediaColumns.DATE_MODIFIED),
+                    null,
+                    null,
+                    null
+                )
+            }.getOrNull()
+            metadataCursor?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val modifiedIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DATE_MODIFIED)
+                    if (modifiedIndex >= 0 && !cursor.isNull(modifiedIndex)) {
+                        val modifiedSeconds = cursor.getLong(modifiedIndex)
+                        if (modifiedSeconds > 0) {
+                            dateModifiedMillis = modifiedSeconds * 1_000L
+                        }
+                    }
+                    val albumIndex = cursor.getColumnIndex(MediaStore.Images.ImageColumns.BUCKET_DISPLAY_NAME)
+                    if (albumIndex >= 0 && !cursor.isNull(albumIndex)) {
+                        albumName = cursor.getString(albumIndex)?.trim()?.takeIf { it.isNotEmpty() }
+                    }
+                }
+            }
+
             val extension = name.substringAfterLast('.', "").lowercase()
             val providerMime = resolver.getType(uri)?.substringBefore(';')?.trim()?.lowercase()
             val mimeFromExtension = ImageFormatCatalog.mimeTypeForExtension(extension)
@@ -60,7 +96,7 @@ data class MediaFile(
                     providerMime
                 else -> providerMime
             }
-            return MediaFile(uri, name, mimeType, size)
+            return MediaFile(uri, name, mimeType, size, dateModifiedMillis, albumName)
         }
     }
 }
