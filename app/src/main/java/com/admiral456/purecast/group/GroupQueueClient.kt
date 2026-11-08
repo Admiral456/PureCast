@@ -1,15 +1,19 @@
 package com.admiral456.purecast.group
 
+import android.content.Context
+import com.admiral456.purecast.network.WifiNetworkResolver
+import com.admiral456.purecast.network.readTextLimited
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
 object GroupQueueClient {
-    fun join(address: String, inviteCode: String, displayName: String): GroupQueueJoinResult {
+    fun join(address: String, inviteCode: String, displayName: String, context: Context? = null): GroupQueueJoinResult {
         val baseUrl = GroupQueueAddress.normalize(address)
         val response = request(
             baseUrl, null, "POST", "/v1/join",
-            JSONObject().put("code", inviteCode.trim().uppercase()).put("displayName", displayName.trim().take(40))
+            JSONObject().put("code", inviteCode.trim().uppercase()).put("displayName", displayName.trim().take(40)),
+            context
         )
         val credentials = GroupQueueCredentials(
             baseUrl = baseUrl,
@@ -21,11 +25,11 @@ object GroupQueueClient {
         return GroupQueueJoinResult(credentials, parseSnapshot(response.getJSONObject("snapshot")))
     }
 
-    fun getState(credentials: GroupQueueCredentials) =
-        parseSnapshot(request(credentials.baseUrl, credentials.accessToken, "GET", "/v1/state", null))
+    fun getState(credentials: GroupQueueCredentials, context: Context? = null) =
+        parseSnapshot(request(credentials.baseUrl, credentials.accessToken, "GET", "/v1/state", null, context))
 
-    fun leave(credentials: GroupQueueCredentials) {
-        request(credentials.baseUrl, credentials.accessToken, "POST", "/v1/leave", JSONObject())
+    fun leave(credentials: GroupQueueCredentials, context: Context? = null) {
+        request(credentials.baseUrl, credentials.accessToken, "POST", "/v1/leave", JSONObject(), context)
     }
 
     fun add(
@@ -33,32 +37,35 @@ object GroupQueueClient {
         title: String,
         mimeType: String,
         mediaUrl: String,
-        sizeBytes: Long?
+        sizeBytes: Long?,
+        context: Context? = null
     ): GroupQueueSnapshot {
         val payload = JSONObject()
             .put("title", title.take(180))
             .put("mimeType", mimeType.take(120))
             .put("mediaUrl", mediaUrl)
             .put("sizeBytes", sizeBytes ?: JSONObject.NULL)
-        return parseSnapshot(request(credentials.baseUrl, credentials.accessToken, "POST", "/v1/queue/add", payload))
+        return parseSnapshot(request(credentials.baseUrl, credentials.accessToken, "POST", "/v1/queue/add", payload, context))
     }
 
-    fun remove(credentials: GroupQueueCredentials, entryId: String) =
-        parseSnapshot(request(credentials.baseUrl, credentials.accessToken, "POST", "/v1/queue/remove", JSONObject().put("id", entryId)))
+    fun remove(credentials: GroupQueueCredentials, entryId: String, context: Context? = null) =
+        parseSnapshot(request(credentials.baseUrl, credentials.accessToken, "POST", "/v1/queue/remove", JSONObject().put("id", entryId), context))
 
-    fun move(credentials: GroupQueueCredentials, fromIndex: Int, toIndex: Int) =
+    fun move(credentials: GroupQueueCredentials, fromIndex: Int, toIndex: Int, context: Context? = null) =
         parseSnapshot(
             request(
                 credentials.baseUrl, credentials.accessToken, "POST", "/v1/queue/move",
-                JSONObject().put("fromIndex", fromIndex).put("toIndex", toIndex)
+                JSONObject().put("fromIndex", fromIndex).put("toIndex", toIndex),
+                context
             )
         )
 
-    fun setCurrent(credentials: GroupQueueCredentials, entryId: String?) =
+    fun setCurrent(credentials: GroupQueueCredentials, entryId: String?, context: Context? = null) =
         parseSnapshot(
             request(
                 credentials.baseUrl, credentials.accessToken, "POST", "/v1/queue/current",
-                JSONObject().put("id", entryId ?: "")
+                JSONObject().put("id", entryId ?: ""),
+                context
             )
         )
 
@@ -67,9 +74,13 @@ object GroupQueueClient {
         token: String?,
         method: String,
         path: String,
-        body: JSONObject?
+        body: JSONObject?,
+        context: Context?
     ): JSONObject {
-        val connection = URL(baseUrl.trimEnd('/') + path).openConnection() as HttpURLConnection
+        val targetUrl = URL(baseUrl.trimEnd('/') + path)
+        val wifiNetwork = context?.let(WifiNetworkResolver::activeWifiNetwork)
+        val connection = (wifiNetwork?.openConnection(targetUrl)
+            ?: targetUrl.openConnection()) as HttpURLConnection
         try {
             connection.connectTimeout = 5_000
             connection.readTimeout = 6_000
@@ -84,7 +95,7 @@ object GroupQueueClient {
             }
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val responseText = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            val responseText = stream?.use { it.readTextLimited(MAX_GROUP_RESPONSE_BYTES) }.orEmpty()
             val response = runCatching { JSONObject(responseText) }.getOrElse { JSONObject() }
             if (code !in 200..299) {
                 throw IllegalStateException(
@@ -139,3 +150,6 @@ object GroupQueueClient {
     }
 
 }
+
+
+private const val MAX_GROUP_RESPONSE_BYTES = 1_048_576
