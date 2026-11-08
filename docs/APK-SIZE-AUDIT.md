@@ -1,4 +1,4 @@
-# Audit velikosti APK — PureCast 0.9.0
+# Audit velikosti APK — PureCast 0.10.0
 
 Měření pochází z finálního běhu GitHub Actions:
 https://github.com/Admiral456/PureCast/actions/runs/42418890210
@@ -48,3 +48,6 @@ Pro instalaci použij jediný artifact `PureCast-Android`, který obsahuje `Pure
 ## Jediný distribuovaný soubor
 
 Od verze 0.9.0 workflow nahrává pouze jeden instalační balíček s názvem `PureCast-Android`. Uvnitř je samostatný `PureCast.apk`, zvolený z plnohodnotné unminified release varianty. Debug a R8 APK se sestavují a ověřují pouze interně, ale nejsou dalšími uživatelskými downloady. K instalaci není potřeba žádná doprovodná aplikace ani data balíček.
+
+
+Verze 0.10.0 přidává katalog MIME typů pro moderní obrazové formáty a systémový výběr souborů. Neobsahuje dodatečné dekódovací knihovny ani převodník; náhledy využívají systémový ImageDecoder, zatímco přenos stále posílá originální soubor.
