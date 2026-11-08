@@ -807,7 +807,7 @@ private fun PureCastScreen() {
                     }
                     OutlinedButton(
                         onClick = {
-                            documentPicker.launch(arrayOf("image/*", "video/*", "application/octet-stream"))
+                            documentPicker.launch(arrayOf("*/*"))
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp)
