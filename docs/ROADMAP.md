@@ -62,7 +62,8 @@
 - [x] Gallery with image/video thumbnails, filename search and media-type filters.
 - [x] Local playback queue with add/remove, reorder, start-from-beginning, previous and next controls.
 - [x] Queue navigation stops at the first/last item and is covered by unit tests.
-- [ ] Albums, date-based sorting and additional library organization.
+- [x] Album filtering from Android MediaStore bucket metadata when available.
+- [x] Sort media by newest available modification date, name, largest size and smallest size.
 - [x] Shared local group queue synchronized between Android phones on the same Wi-Fi, with host-only playback/reorder/remove permissions.
 - [x] Shared queue previous/next navigation and stop-at-boundaries behavior.
 - [x] Show sender identity for items submitted to a shared queue.
