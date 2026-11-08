@@ -268,38 +268,65 @@ class LocalMediaServer(private val context: Context) : Closeable {
             "<p>Televizor neumí rozpoznat typ tohoto souboru: $escapedName</p>" +
                 "<a href=\"$mediaPath\">Otevřít originální soubor</a>"
         }
-        val script = if (media.isVideo) {
-            """
-            <script>
-              (() => {
-                const player = document.getElementById('player');
-                const result = document.getElementById('compatibility');
-                const mime = '$safeMime';
-                if (!player || !result) return;
-                const support = player.canPlayType(mime);
-                result.textContent = support === 'probably'
-                  ? 'Prohlížeč pravděpodobně podporuje typ $safeMime. Konkrétní kodek a HDR se ověřují až při přehrávání.'
-                  : support === 'maybe'
-                    ? 'Prohlížeč uvádí možnou podporu $safeMime. Přesná kompatibilita není zaručena.'
-                    : 'Prohlížeč nepotvrdil podporu $safeMime. PureCast soubor nepřevádí.';
-                player.addEventListener('error', () => {
-                  result.textContent = 'Přehrávání selhalo. Televizor pravděpodobně nepodporuje tento formát nebo kodek.';
-                });
-                player.addEventListener('loadedmetadata', () => {
-                  if (player.videoWidth && player.videoHeight) {
-                    result.textContent += ' Zjištěné rozlišení: ' + player.videoWidth + ' × ' + player.videoHeight + '.';
-                  }
-                });
-              })();
-            </script>
-            """.trimIndent()
-        } else {
-            ""
+        val script = when {
+            media.isImage -> {
+                """
+                <script>
+                  (() => {
+                    const picture = document.getElementById('picture');
+                    const result = document.getElementById('compatibility');
+                    if (!picture || !result) return;
+                    const loaded = () => {
+                      const dimensions = picture.naturalWidth && picture.naturalHeight
+                        ? ' Rozlišení: ' + picture.naturalWidth + ' × ' + picture.naturalHeight + '.'
+                        : '';
+                      result.textContent = 'Televizor zobrazil originální obrázek ($safeMime).' + dimensions;
+                    };
+                    const failed = () => {
+                      result.textContent = 'Prohlížeč televize nedokázal zobrazit $safeMime. Soubor zůstal beze změny; tento model možná nepodporuje jeho formát.';
+                    };
+                    picture.addEventListener('error', failed, { once: true });
+                    if (picture.complete) {
+                      if (picture.naturalWidth > 0) loaded(); else failed();
+                    } else {
+                      picture.addEventListener('load', loaded, { once: true });
+                    }
+                  })();
+                </script>
+                """.trimIndent()
+            }
+            media.isVideo -> {
+                """
+                <script>
+                  (() => {
+                    const player = document.getElementById('player');
+                    const result = document.getElementById('compatibility');
+                    if (!player || !result) return;
+                    const mime = player.querySelector('source')?.type || '';
+                    const support = player.canPlayType(mime);
+                    result.textContent = support === 'probably'
+                      ? 'Prohlížeč pravděpodobně podporuje typ ' + mime + '. Konkrétní kodek a HDR se ověřují až při přehrávání.'
+                      : support === 'maybe'
+                        ? 'Prohlížeč uvádí možnou podporu ' + mime + '. Přesná kompatibilita není zaručena.'
+                        : 'Prohlížeč nepotvrdil podporu ' + mime + '. PureCast soubor nepřevádí.';
+                    player.addEventListener('error', () => {
+                      result.textContent = 'Přehrávání selhalo. Televizor pravděpodobně nepodporuje tento formát nebo kodek.';
+                    });
+                    player.addEventListener('loadedmetadata', () => {
+                      if (player.videoWidth && player.videoHeight) {
+                        result.textContent += ' Zjištěné rozlišení: ' + player.videoWidth + ' × ' + player.videoHeight + '.';
+                      }
+                    });
+                  })();
+                </script>
+                """.trimIndent()
+            }
+            else -> ""
         }
-        val compatibilityPanel = if (media.isVideo) {
-            "<p id=\"compatibility\" class=\"compatibility\">Kontroluji možnosti přehrávače televize…</p>"
+        val compatibilityPanel = if (media.isImage || media.isVideo) {
+            "<p id=\"compatibility\" class=\"compatibility\">Ověřuji zobrazení originálního souboru v televizoru…</p>"
         } else {
-            "<p class=\"compatibility\">Fotografie se načítá z původního souboru bez převodu.</p>"
+            "<p class=\"compatibility\">Televizor nemusí tento typ souboru podporovat.</p>"
         }
         val html = """
             <!doctype html>
