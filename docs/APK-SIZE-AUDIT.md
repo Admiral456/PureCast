@@ -1,4 +1,4 @@
-# Audit velikosti APK — PureCast 0.10.0
+# Audit velikosti APK — PureCast 0.11.0
 
 Měření pochází z finálního běhu GitHub Actions:
 https://github.com/Admiral456/PureCast/actions/runs/42418890210
@@ -51,3 +51,6 @@ Od verze 0.9.0 workflow nahrává pouze jeden instalační balíček s názvem `
 
 
 Verze 0.10.0 přidává katalog MIME typů pro moderní obrazové formáty a systémový výběr souborů. Neobsahuje dodatečné dekódovací knihovny ani převodník; náhledy využívají systémový ImageDecoder, zatímco přenos stále posílá originální soubor.
+
+
+Verze 0.11.0 rozšiřuje MIME katalog o vědecké a grafické formáty OpenEXR, DDS, KTX/KTX2, FITS a QOI a doplňuje potvrzení skutečného načtení obrázku v TV prohlížeči. Tyto změny nepřidávají dekódovací knihovny; originální soubor se nadále posílá beze změny.
