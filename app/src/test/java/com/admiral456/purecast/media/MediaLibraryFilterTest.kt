@@ -83,7 +83,7 @@ class MediaLibraryFilterTest {
         val second = entry("two.jpg", album = "dovolená")
         val third = entry("work.jpg", album = "Práce")
 
-        val result = listOf(first, second, third).filterByAlbum("DOVOLENÁ") { it.album }
+        val result = MediaLibraryFilter.filterByAlbum(listOf(first, second, third), "DOVOLENÁ") { it.album }
         assertEquals(listOf("one.jpg", "two.jpg"), result.map { it.name })
         assertEquals(
             listOf("Dovolená", "Práce"),
