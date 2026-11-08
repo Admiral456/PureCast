@@ -46,4 +46,35 @@ class DlnaCompatibilityTest {
             DlnaCompatibility.evaluate("application/octet-stream", listOf("http-get:*:*:*"))
         )
     }
+    @Test
+    fun ignoresDlnaFeatureParametersWhenMatchingMimeType() {
+        val sink = listOf("http-get:*:image/jpeg;DLNA.ORG_PN=JPEG_LRG:DLNA.ORG_OP=01")
+        assertEquals(
+            MediaCompatibility.SUPPORTED_MIME_TYPE,
+            DlnaCompatibility.evaluate("image/jpeg; charset=binary", sink)
+        )
+    }
+
+    @Test
+    fun matchesModernImageTypesCaseInsensitively() {
+        val sink = listOf("http-get:*:IMAGE/AVIF:*", "http-get:*:image/heic:*")
+        assertEquals(
+            MediaCompatibility.SUPPORTED_MIME_TYPE,
+            DlnaCompatibility.evaluate("image/avif", sink)
+        )
+        assertEquals(
+            MediaCompatibility.SUPPORTED_MIME_TYPE,
+            DlnaCompatibility.evaluate("IMAGE/HEIC", sink)
+        )
+    }
+
+    @Test
+    fun ignoresMalformedProtocolInfoEntries() {
+        val sink = listOf("not-a-protocol-info", "http-get:*:*", "http-get:*:image/png:*")
+        assertEquals(
+            MediaCompatibility.SUPPORTED_MIME_TYPE,
+            DlnaCompatibility.evaluate("image/png", sink)
+        )
+    }
+
 }
