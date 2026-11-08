@@ -44,6 +44,9 @@ REQUIRED_DEX_STRINGS = (
     "image/x-canon-crw",
     "Televizor zobrazil originální obrázek",
     "Prohlížeč televize nedokázal zobrazit",
+    'id="picture"',
+    'data-mime="',
+    "getAttribute('data-mime')",
 )
 
 REQUIRED_ABIS = {
