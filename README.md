@@ -8,13 +8,13 @@ PureCast is an Android application for sending original photos and videos from p
 - Target phone families: Samsung Galaxy, Xiaomi and Redmi.
 - The same Android APK runs on all three families. Brand detection is used for diagnostics; the transfer implementation is manufacturer-neutral.
 - Other compatible Android phones are not blocked.
-- Multiple Android phones can contribute to a temporary shared queue on the same Wi-Fi network. One phone hosts the session and controls DLNA playback; each sender keeps and streams its own original media.
+- Multiple Android phones can contribute to a temporary shared queue on the same Wi-Fi network. One phone hosts the session and controls DLNA playback; each sender keeps and streams its own original media. Shared queue client requests also use the selected Wi-Fi route and bounded JSON response reads.
 
 ## Core rule: Direct Play
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.11.0
+## Current implementation — 0.12.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes, custom adaptive PureCast launcher icon.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
@@ -22,9 +22,9 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - SSDP discovery for UPnP/DLNA MediaRenderer devices across common UPnP search targets, preferring the active Wi-Fi route when multiple networks or VPNs are present.
 - Secure XML parsing and optional UPnP URLBase handling.
 - AVTransport play, pause, resume, stop, seek, playback-state and position queries.
-- ConnectionManager GetProtocolInfo parsing with conservative MIME-type compatibility reporting.
-- Local HTTP streaming of the original selected URI with byte-range support, Wi-Fi-interface binding, bounded client concurrency and active-connection cleanup.
-- TV browser fallback page with responsive playback UI, video MIME hints and actual image load/error feedback including decoded dimensions.
+- ConnectionManager GetProtocolInfo parsing with conservative MIME-type compatibility reporting; DLNA SOAP commands use the active Wi-Fi network when available.
+- Local HTTP streaming of the original selected URI with byte-range support, Wi-Fi-interface binding, bounded client concurrency, validated MIME response headers and active-connection cleanup.
+- TV browser fallback page with responsive playback UI, video MIME hints and actual image load/error feedback including decoded dimensions. The image element and its MIME feedback are checked in the packaged APK.
 - Foreground media-playback service to keep streaming active when the app is backgrounded or the display turns off.
 - Android Photo Picker plus a multi-select Android document picker for image/video files and less common formats, with persistent URI permission where supported. Non-media documents are skipped and cannot be sent to the TV or added to playback queues.
 - Image MIME recognition by extension for JPG/JPEG, PNG/APNG, GIF, WebP, HEIC/HEIF, AVIF, JPEG XL, TIFF, BMP, SVG, JPEG 2000, OpenEXR, DDS, KTX/KTX2, FITS, QOI, and camera RAW formats.
@@ -34,7 +34,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - Gallery search by filename and photo/video filters.
 - Progressive technical metadata inspection in small batches, with cancellation when a new selection replaces the previous one.
 - Technical metadata inspection for image size and video resolution, frame rate, video/audio MIME codecs, bitrate, duration and available HDR transfer metadata.
-- Unit tests for HTTP range handling, UPnP time values, DLNA MIME profiles and sender/receiver brand classification.
+- Unit tests for HTTP range handling, bounded network response reads, UPnP time values, DLNA MIME profiles and sender/receiver brand classification.
 - GitHub Actions CI builds and verifies debug, R8-optimized and unminified release variants internally.
 - CI checks that DLNA commands, local media routes and shared-queue API endpoints survive release packaging.
 - CI publishes exactly one installable artifact: `PureCast-Android`, containing a single standalone `PureCast.apk`.
@@ -86,7 +86,7 @@ PureCast does not bundle a video transcoder, codec framework, sample photos, sam
 - Direct Play preserves the bytes of the original file served by PureCast. It does not guarantee that the TV displays every pixel, frame rate, color format or HDR mode exactly as the source; that depends on the TV decoder and display pipeline.
 - DLNA ConnectionManager MIME profiles are only an advertised container/content-type hint. They do not prove support for a particular video/audio codec, frame rate, bitrate, HDR profile or resolution.
 - The browser playback page uses the TV browser's own media engine. A browser MIME hint is not proof that a particular codec/bitrate/HDR combination will play.
-- Unsupported or unverified media is not silently converted. JPEG XL, SVG, camera RAW, OpenEXR, DDS/KTX, FITS and other less common formats may be passed through without a local thumbnail; display still depends on the TV decoder/browser.
+- UPnP device descriptions, SOAP replies and shared-queue JSON responses are limited to 1 MiB before parsing. Oversized or malformed control-plane responses fail visibly. JPEG XL, SVG, camera RAW, OpenEXR, DDS/KTX, FITS and other less common formats may be passed through without a local thumbnail; display still depends on the TV decoder/browser.
 - The HTTP server currently supports single byte ranges; multipart ranges are not implemented.
 - Foreground streaming continues while Android keeps the foreground service alive. Battery-saver policies and force-stop can still interrupt it.
 - This build targets Android API 36. Before raising target SDK to Android 17/API 37, implement and request the runtime `ACCESS_LOCAL_NETWORK` permission.
