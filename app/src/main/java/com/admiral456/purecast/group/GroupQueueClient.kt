@@ -4,6 +4,7 @@ import android.content.Context
 import com.admiral456.purecast.network.WifiNetworkResolver
 import com.admiral456.purecast.network.readTextLimited
 import org.json.JSONObject
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -96,7 +97,11 @@ object GroupQueueClient {
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val responseText = stream?.use { it.readTextLimited(MAX_GROUP_RESPONSE_BYTES) }.orEmpty()
-            val response = runCatching { JSONObject(responseText) }.getOrElse { JSONObject() }
+            val response = try {
+                JSONObject(responseText)
+            } catch (error: Exception) {
+                throw IOException("Sdílená fronta vrátila neplatnou JSON odpověď.", error)
+            }
             if (code !in 200..299) {
                 throw IllegalStateException(
                     response.optString("error").ifBlank { "Sdílená fronta odpověděla HTTP $code." }
