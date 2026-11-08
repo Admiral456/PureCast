@@ -32,6 +32,16 @@ Samsung zveřejňuje modelově specifikované tabulky video kontejnerů, kodeků
 
 Stejné principy jako u Samsungu: DLNA renderer, pokud ho firmware zpřístupňuje, jinak TV browser fallback. Samotná podpora SmartShare/DLNA jako klienta ještě automaticky neznamená podporu ovladatelného MediaRenderer.
 
+### LG 55UJ7507 — webOS 3.5
+
+Oficiální stránka LG uvádí pro model 55UJ7507 modelový rok 2017, webOS 3.5, internetový prohlížeč a DLNA pro filmy, fotografie a hudbu:
+https://www.lg.com/cz/tv-a-soundbars/uhd-tv/55uj7507/
+
+Dokumentace vývojářské platformy LG pro webOS TV 3.5 uvádí v tabulce obrazových formátů podporu JPEG (.jpg/.jpeg), GIF, PNG, BMP a WebP:
+https://webostv.developer.lge.com/develop/specifications/video-audio-35
+
+Tato tabulka popisuje platformu webOS TV 3.5; sama o sobě nepotvrzuje, že konkrétní firmware 55UJ7507 přehraje každý soubor i přes DLNA. Proto PureCast tyto formáty používá jako první testovací sadu pro prohlížeč TV. HEIC/HEIF, AVIF, JPEG XL, RAW a další méně běžné typy zůstávají pro tento konkrétní model neověřené, dokud je neotestujeme přímo na televizi.
+
 ### Ostatní Smart TV
 
 Aplikace může použít DLNA/UPnP u kompatibilních televizorů dalších značek. Zařízení bez DLNA rendereru lze zkusit přes webový prohlížeč, pokud ho mají a podporují příslušný formát.
