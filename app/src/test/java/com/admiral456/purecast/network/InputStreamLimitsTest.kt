@@ -26,6 +26,25 @@ class InputStreamLimitsTest {
     }
 
     @Test
+    fun continuesWhenBulkReadTemporarilyReturnsZero() {
+        val delegate = ByteArrayInputStream("PureCast".toByteArray(Charsets.UTF_8))
+        val input = object : java.io.InputStream() {
+            private var returnZero = true
+
+            override fun read(): Int = delegate.read()
+
+            override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                if (returnZero) {
+                    returnZero = false
+                    return 0
+                }
+                return delegate.read(buffer, offset, length)
+            }
+        }
+        assertEquals("PureCast", input.readTextLimited(32))
+    }
+
+    @Test
     fun preservesUtf8Text() {
         val expected = "Televize – fotografie žluťoučký kůň"
         val actual = ByteArrayInputStream(expected.toByteArray(Charsets.UTF_8))
