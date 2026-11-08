@@ -53,9 +53,10 @@ data class MediaFile(
                 ?: knownMimeTypes[extension]
                 ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
             val mimeType = when {
-                providerMime.isNullOrBlank() -> mimeFromExtension ?: "application/octet-stream"
+                mimeFromExtension != null -> mimeFromExtension
+                providerMime.isNullOrBlank() -> "application/octet-stream"
                 providerMime in setOf("application/octet-stream", "binary/octet-stream") ->
-                    mimeFromExtension ?: providerMime
+                    providerMime
                 else -> providerMime
             }
             return MediaFile(uri, name, mimeType, size)
