@@ -1,5 +1,7 @@
 package com.admiral456.purecast.dlna
 
+import android.content.Context
+import com.admiral456.purecast.network.WifiNetworkResolver
 import com.admiral456.purecast.media.MediaFile
 import java.net.HttpURLConnection
 import java.net.URL
@@ -35,7 +37,7 @@ object UpnpTime {
     }
 }
 
-class DlnaController {
+class DlnaController(private val context: Context? = null) {
     suspend fun play(device: DlnaDevice, mediaUrl: String, media: MediaFile) =
         play(device, mediaUrl, media.displayName, media.mimeType)
 
@@ -139,7 +141,10 @@ class DlnaController {
             "<s:Body><u:$action xmlns:u=\"${xmlEscape(serviceType)}\">" +
             "$body</u:$action></s:Body></s:Envelope>"
 
-        val connection = URL(controlUrl).openConnection() as HttpURLConnection
+        val targetUrl = URL(controlUrl)
+        val wifiNetwork = context?.let(WifiNetworkResolver::activeWifiNetwork)
+        val connection = (wifiNetwork?.openConnection(targetUrl)
+            ?: targetUrl.openConnection()) as HttpURLConnection
         try {
             connection.connectTimeout = 6_000
             connection.readTimeout = 8_000
