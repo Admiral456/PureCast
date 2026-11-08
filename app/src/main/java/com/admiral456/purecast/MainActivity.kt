@@ -144,7 +144,7 @@ private fun PureCastScreen() {
     val appContext = context.applicationContext
     val scope = rememberCoroutineScope()
     val discovery = remember { DlnaDiscovery(appContext) }
-    val controller = remember { DlnaController() }
+    val controller = remember { DlnaController(appContext) }
     val senderInfo = remember { SenderDeviceInfo.current() }
 
     var devices by remember { mutableStateOf<List<DlnaDevice>>(emptyList()) }
