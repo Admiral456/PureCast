@@ -220,14 +220,16 @@ private fun PureCastScreen() {
                 uris.distinctBy { it.toString() }
                     .mapNotNull { uri -> runCatching { MediaFile.fromUri(appContext, uri) }.getOrNull() }
             }
+            val mediaFiles = importedFiles.filter { it.isPlayableMedia }
             val existingUris = if (appendToLibrary) selectedFiles.map { it.uri }.toSet() else emptySet()
             val availableSlots = if (appendToLibrary) {
                 (MAX_SELECTED_MEDIA - selectedFiles.size).coerceAtLeast(0)
             } else {
                 MAX_SELECTED_MEDIA
             }
-            val uniqueFiles = importedFiles.filterNot { it.uri in existingUris }
+            val uniqueFiles = mediaFiles.filterNot { it.uri in existingUris }
             val files = uniqueFiles.take(availableSlots)
+            val skippedNonMedia = importedFiles.size - mediaFiles.size
 
             if (!appendToLibrary) {
                 technicalInfo.clear()
@@ -236,13 +238,17 @@ private fun PureCastScreen() {
             selectedFiles.addAll(files)
             mediaSearchQuery = ""
             mediaKindFilter = MediaKindFilter.ALL
-            isError = importedFiles.isEmpty() || (files.isEmpty() && availableSlots == 0)
+            isError = importedFiles.isEmpty() || mediaFiles.isEmpty() ||
+                (files.isEmpty() && availableSlots == 0)
             status = when {
                 importedFiles.isEmpty() -> "Vybrané soubory se nepodařilo načíst."
+                mediaFiles.isEmpty() -> "Výběr neobsahuje rozpoznané obrázky ani videa. Ostatní dokumenty PureCast nepřehrává."
                 files.isEmpty() && availableSlots == 0 -> "Knihovna už obsahuje maximum $MAX_SELECTED_MEDIA souborů."
-                files.isEmpty() -> "Vybrané soubory už v knihovně jsou."
+                files.isEmpty() -> "Vybrané obrázky a videa už v knihovně jsou."
                 uniqueFiles.size > files.size ->
-                    "Přidáno ${files.size} souborů. Knihovna podporuje nejvýše $MAX_SELECTED_MEDIA položek."
+                    "Přidáno ${files.size} médií. Knihovna podporuje nejvýše $MAX_SELECTED_MEDIA položek."
+                skippedNonMedia > 0 ->
+                    "Načteno ${files.size} obrázků a videí. Ostatní dokumenty byly přeskočeny."
                 else -> "Načteno ${files.size} souborů. Náhledy a technické údaje se připravují na pozadí."
             }
 
@@ -809,7 +815,7 @@ private fun PureCastScreen() {
                         Text("＋  Procházet soubory a další formáty")
                     }
                     Text(
-                        "Podporované typy zahrnují JPG, PNG, GIF, WebP, HEIC/HEIF, AVIF, TIFF, BMP, SVG, JPEG XL a fotoaparátní RAW. Náhled závisí na Androidu; zvolený soubor se vždy odesílá v originálu.",
+                        "Rozpoznáváme JPG/JPEG, PNG, GIF, WebP, HEIC/HEIF, AVIF, JPEG XL, TIFF, BMP, SVG, JPEG 2000, RAW, FITS, OpenEXR, DDS a KTX. Náhled závisí na Androidu a zobrazení na podpoře televize; originál nijak neupravujeme.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -935,7 +941,7 @@ private fun PureCastScreen() {
                                                             playOn(device, file)
                                                         }
                                                     },
-                                                    enabled = activeDevice != null && busyLabel == null,
+                                                    enabled = activeDevice != null && busyLabel == null && file.isPlayableMedia,
                                                     modifier = Modifier.weight(1f),
                                                     shape = RoundedCornerShape(12.dp),
                                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
@@ -962,7 +968,7 @@ private fun PureCastScreen() {
                                             }
                                             TextButton(
                                                 onClick = { addToQueue(file) },
-                                                enabled = playbackQueue.none { it.uri == file.uri },
+                                                enabled = file.isPlayableMedia && playbackQueue.none { it.uri == file.uri },
                                                 modifier = Modifier.fillMaxWidth()
                                             ) {
                                                 Text(if (playbackQueue.any { it.uri == file.uri }) "✓ Ve frontě" else "＋ Přidat do fronty")
@@ -970,7 +976,7 @@ private fun PureCastScreen() {
                                             if (sharedCredentials != null) {
                                                 TextButton(
                                                     onClick = { addToSharedQueue(file) },
-                                                    enabled = !sharedBusy,
+                                                    enabled = !sharedBusy && file.isPlayableMedia,
                                                     modifier = Modifier.fillMaxWidth()
                                                 ) {
                                                     Text("＋ Přidat do sdílené fronty")
