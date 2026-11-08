@@ -48,7 +48,7 @@ data class MediaFile(
             }
 
             val extension = name.substringAfterLast('.', "").lowercase()
-            val providerMime = resolver.getType(uri)?.trim()?.lowercase()
+            val providerMime = resolver.getType(uri)?.substringBefore(';')?.trim()?.lowercase()
             val mimeFromExtension = ImageFormatCatalog.mimeTypeForExtension(extension)
                 ?: knownMimeTypes[extension]
                 ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
