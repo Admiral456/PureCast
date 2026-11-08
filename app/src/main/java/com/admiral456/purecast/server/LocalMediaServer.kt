@@ -258,7 +258,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
         val safeMime = htmlEscape(media.mimeType)
         val mediaPath = "/media/$token"
         val content = if (media.isImage) {
-            "<img src=\"$mediaPath\" alt=\"$escapedName\">"
+            "<img id=\"picture\" data-mime=\"$safeMime\" src=\"$mediaPath\" alt=\"$escapedName\">"
         } else if (media.isVideo) {
             "<video id=\"player\" controls autoplay playsinline preload=\"metadata\">" +
                 "<source src=\"$mediaPath\" type=\"$safeMime\">" +
