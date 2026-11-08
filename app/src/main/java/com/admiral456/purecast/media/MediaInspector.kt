@@ -2,9 +2,11 @@ package com.admiral456.purecast.media
 
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
+import android.os.Build
 
 data class MediaTechnicalInfo(
     val width: Int? = null,
@@ -75,6 +77,22 @@ object MediaInspector {
     }
 
     private fun inspectImage(context: Context, media: MediaFile): MediaTechnicalInfo? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val dimensions = intArrayOf(0, 0)
+            val decoded = runCatching {
+                val source = ImageDecoder.createSource(context.contentResolver, media.uri)
+                ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                    dimensions[0] = info.size.width
+                    dimensions[1] = info.size.height
+                    // Read header dimensions without allocating a full-resolution bitmap.
+                    decoder.setTargetSize(1, 1)
+                }
+            }.isSuccess
+            if (decoded && dimensions[0] > 0 && dimensions[1] > 0) {
+                return MediaTechnicalInfo(width = dimensions[0], height = dimensions[1])
+            }
+        }
+
         return try {
             val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             context.contentResolver.openInputStream(media.uri)?.use {
