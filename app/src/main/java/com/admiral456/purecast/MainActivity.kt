@@ -958,7 +958,7 @@ private fun PureCastScreen() {
                                                 }
                                                 OutlinedButton(
                                                     onClick = { prepareBrowser(file) },
-                                                    enabled = busyLabel == null,
+                                                    enabled = busyLabel == null && file.isPlayableMedia,
                                                     modifier = Modifier.weight(1f),
                                                     shape = RoundedCornerShape(12.dp),
                                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
