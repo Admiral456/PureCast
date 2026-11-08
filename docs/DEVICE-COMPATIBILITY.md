@@ -14,6 +14,18 @@ PureCast je v této fázi pouze aplikace pro Android. iOS verze se nevyvíjí.
 
 Samsung, Xiaomi a Redmi používají stejnou Android implementaci. PureCast rozpozná výrobce a model pro diagnostiku, ale přenos médií se nespoléhá na proprietární funkce konkrétní značky telefonu.
 
+## Přístup ke galerii Androidu
+
+PureCast vyžádá přístup ke knihovně až po stisknutí tlačítka **Povolit přístup** v sekci Fotky a videa. Aplikace nejprve vysvětlí účel požadavku a následně zobrazí systémové okno Androidu.
+
+- Android 12L a starší: systémové oprávnění ke čtení externího úložiště.
+- Android 13: oprávnění pro fotografie a videa.
+- Android 14 a novější: plný přístup, přístup pouze k uživatelem vybraným médiím nebo zamítnutí. PureCast používá `READ_MEDIA_VISUAL_USER_SELECTED` a respektuje výběr Androidu.
+
+V sekci Fotky a videa se zobrazuje aktuální rozsah oprávnění. Uživatel může oprávnění změnit nebo otevřít nastavení aplikace a načíst dostupná média z galerie. Při omezeném přístupu Android zpřístupní pouze vybrané položky.
+
+Odmítnutí oprávnění neblokuje běžný Android Photo Picker ani výběr souborů. Tyto dva režimy umožňují odeslat konkrétní položky bez udělení přístupu k celé galerii.
+
 ## Televizory
 
 ### Samsung Smart TV
