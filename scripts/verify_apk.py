@@ -26,6 +26,17 @@ REQUIRED_DEX_STRINGS = (
     "Pozastavit",
     "Pokračovat",
     "Zastavit",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/apng",
+    "image/heic",
+    "image/heif",
+    "image/avif",
+    "image/jxl",
+    "image/tiff",
+    "image/svg+xml",
+    "image/x-adobe-dng",
 )
 
 REQUIRED_ABIS = {
