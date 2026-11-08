@@ -418,8 +418,92 @@ class LocalMediaServer(private val context: Context) : Closeable {
         val slash = normalized.indexOf('/')
         if (slash <= 0 || slash != normalized.lastIndexOf('/')) return "application/octet-stream"
         val valid = normalized.indices.all { index ->
-            index == slash || normalized[index].isLetterOrDigit() ||
-                normalized[index] in "!#&^_.+-"
+            val character = normalized[index]
+            index == slash || character in 'a'..'z' || character in '0'..'9' ||
+                character in "!#&^_.+-" || character == '
+        }
+        return if (valid) normalized else "application/octet-stream"
+    }
+
+    private fun htmlEscape(value: String): String =
+        value.replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;")
+
+    private fun pruneExpiredTokens() {
+        val now = System.currentTimeMillis()
+        mediaByToken.entries.removeAll { it.value.expiresAtMillis < now }
+    }
+
+    private fun findLocalIpv4(): Inet4Address? {
+        WifiNetworkResolver.activeWifiIpv4(context)?.let { return it }
+        val candidates = mutableListOf<Pair<Int, Inet4Address>>()
+        val interfaces = NetworkInterface.getNetworkInterfaces()
+        if (interfaces != null) {
+            while (interfaces.hasMoreElements()) {
+                val networkInterface = interfaces.nextElement()
+                if (!networkInterface.isUp || networkInterface.isLoopback) continue
+                val preference = when {
+                    networkInterface.name.startsWith("wlan", true) -> 0
+                    networkInterface.name.startsWith("wifi", true) -> 1
+                    networkInterface.name.startsWith("ap", true) -> 2
+                    networkInterface.name.startsWith("eth", true) -> 3
+                    else -> 5
+                }
+                if (networkInterface.name.startsWith("tun", true) ||
+                    networkInterface.name.startsWith("ppp", true) ||
+                    networkInterface.name.startsWith("rmnet", true)
+                ) continue
+                val addresses = networkInterface.inetAddresses
+                while (addresses.hasMoreElements()) {
+                    val address = addresses.nextElement()
+                    if (address is Inet4Address && address.isSiteLocalAddress && !address.isLoopbackAddress) {
+                        candidates.add(preference to address)
+                    }
+                }
+            }
+        }
+        candidates.minByOrNull { it.first }?.second?.let { return it }
+
+        val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val properties = connectivity.activeNetwork?.let(connectivity::getLinkProperties)
+        return properties?.linkAddresses
+            ?.asSequence()
+            ?.map { it.address }
+            ?.filterIsInstance<Inet4Address>()
+            ?.firstOrNull { it.isSiteLocalAddress && !it.isLoopbackAddress }
+    }
+
+    override fun close() {
+        try {
+            serverSocket?.close()
+        } catch (_: Exception) {
+        }
+        serverSocket = null
+        acceptThread = null
+        boundAddress = null
+        mediaByToken.clear()
+        clientSockets.forEach { client ->
+            try {
+                client.close()
+            } catch (_: Exception) {
+            }
+        }
+        clientSockets.clear()
+        clientExecutor.shutdownNow()
+    }
+
+    companion object {
+        private const val MAX_HEADER_BYTES = 16_384
+        private const val BUFFER_SIZE = 64 * 1024
+        private const val MIN_CLIENT_THREADS = 2
+        private const val MAX_CLIENT_THREADS = 8
+        private const val MAX_QUEUED_CLIENTS = 32
+        private const val CLIENT_KEEP_ALIVE_SECONDS = 30L
+        private const val TOKEN_LIFETIME_MS = 6 * 60 * 60 * 1_000L
+        private val MEDIA_PATH = Regex("^/(media|tv)/([A-Za-z0-9_-]{12})$")
+    }
+}
+
         }
         return if (valid) normalized else "application/octet-stream"
     }
