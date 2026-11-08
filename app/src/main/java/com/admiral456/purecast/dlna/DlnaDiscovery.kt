@@ -1,10 +1,11 @@
 package com.admiral456.purecast.dlna
 
 import android.content.Context
+import java.io.ByteArrayInputStream
 import android.net.wifi.WifiManager
 import android.net.Network
 import com.admiral456.purecast.network.WifiNetworkResolver
-import com.admiral456.purecast.network.readTextLimited
+import com.admiral456.purecast.network.readBytesLimited
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -103,10 +104,10 @@ class DlnaDiscovery(context: Context) {
                 isXIncludeAware = false
                 isExpandEntityReferences = false
             }
-            val descriptionXml = connection.inputStream.use {
-                it.readTextLimited(MAX_DEVICE_DESCRIPTION_BYTES)
+            val descriptionBytes = connection.inputStream.use {
+                it.readBytesLimited(MAX_DEVICE_DESCRIPTION_BYTES)
             }
-            val document = factory.newDocumentBuilder().parse(descriptionXml.byteInputStream(Charsets.UTF_8))
+            val document = factory.newDocumentBuilder().parse(ByteArrayInputStream(descriptionBytes))
             val allDevices = document.getElementsByTagName("device")
             var renderer: Element? = null
             for (index in 0 until allDevices.length) {
