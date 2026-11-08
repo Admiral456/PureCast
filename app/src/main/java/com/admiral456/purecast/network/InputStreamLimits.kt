@@ -18,6 +18,16 @@ internal fun InputStream.readBytesLimited(maxBytes: Int): ByteArray {
         val allowedRead = minOf(buffer.size, maxBytes - total + 1)
         val read = read(buffer, 0, allowedRead)
         if (read < 0) break
+        if (read == 0) {
+            val singleByte = read()
+            if (singleByte < 0) break
+            total++
+            if (total > maxBytes) {
+                throw IOException("Síťová odpověď překročila povolenou velikost $maxBytes bajtů.")
+            }
+            output.write(singleByte)
+            continue
+        }
         total += read
         if (total > maxBytes) {
             throw IOException("Síťová odpověď překročila povolenou velikost $maxBytes bajtů.")
