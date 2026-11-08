@@ -56,8 +56,9 @@ jobs:
           DEBUG_SIZE=$(stat -c %s app/build/outputs/apk/debug/app-debug.apk)
           OPTIMIZED_SIZE=$(stat -c %s app/build/outputs/apk/release/app-release.apk)
           FULL_SIZE=$(stat -c %s app/build/outputs/apk/PureCast.apk)
+          VERSION_NAME=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
           {
-            echo "## PureCast 0.9.0 package verification"
+            echo "## PureCast ${VERSION_NAME} package verification"
             echo ""
             echo "| Build | Size |"
             echo "|---|---:|"
