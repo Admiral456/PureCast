@@ -36,7 +36,16 @@ class DlnaDiscovery(context: Context) {
 
         try {
             DatagramSocket().use { socket ->
-                wifiNetwork?.let { network -> runCatching { network.bindSocket(socket) } }
+                wifiNetwork?.let { network ->
+                    try {
+                        network.bindSocket(socket)
+                    } catch (error: Exception) {
+                        throw IllegalStateException(
+                            "Vyhledávání televizorů se nepodařilo navázat na Wi-Fi síť.",
+                            error
+                        )
+                    }
+                }
                 socket.soTimeout = 300
                 val destination = InetAddress.getByName("239.255.255.250")
                 searchTargets.forEach { target ->
