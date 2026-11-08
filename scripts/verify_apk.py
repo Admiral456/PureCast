@@ -37,6 +37,13 @@ REQUIRED_DEX_STRINGS = (
     "image/tiff",
     "image/svg+xml",
     "image/x-adobe-dng",
+    "image/qoi",
+    "image/x-exr",
+    "image/ktx2",
+    "image/fits",
+    "image/x-canon-crw",
+    "Televizor zobrazil originální obrázek",
+    "Prohlížeč televize nedokázal zobrazit",
 )
 
 REQUIRED_ABIS = {
