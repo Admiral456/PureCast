@@ -24,7 +24,7 @@ object MediaThumbnailLoader {
                     null
                 )
             }.getOrNull()
-            if (providerThumbnail != null) return providerThumbnail
+            if (providerThumbnail != null) return providerThumbnail.fitInside(targetWidth, targetHeight)
         }
 
         if (media.isVideo) return loadVideoFrame(context, media, targetWidth, targetHeight)
