@@ -13,6 +13,14 @@ enum class MediaLibrarySort(val label: String) {
     SMALLEST_FIRST("Nejmenší")
 }
 
+data class MediaLibraryMetadata(
+    val displayName: String,
+    val mimeType: String,
+    val sizeBytes: Long?,
+    val dateModifiedMillis: Long?,
+    val albumName: String?
+)
+
 object MediaLibraryFilter {
     fun filter(
         media: List<MediaFile>,
@@ -29,25 +37,47 @@ object MediaLibraryFilter {
         sort: MediaLibrarySort,
         album: String? = null
     ): List<MediaFile> {
-        val filtered = filter(media, query, kind).filter { file ->
-            album == null || file.albumName.equals(album, ignoreCase = true)
-        }
-        return when (sort) {
-            MediaLibrarySort.NEWEST ->
-                filtered.sortedByDescending { it.dateModifiedMillis ?: Long.MIN_VALUE }
-            MediaLibrarySort.NAME_ASCENDING ->
-                filtered.sortedBy { it.displayName.lowercase() }
-            MediaLibrarySort.LARGEST_FIRST ->
-                filtered.sortedByDescending { it.sizeBytes ?: Long.MIN_VALUE }
-            MediaLibrarySort.SMALLEST_FIRST ->
-                filtered.sortedBy { it.sizeBytes ?: Long.MAX_VALUE }
+        val filtered = filter(media, query, kind).filterByAlbum(album) { it.albumName }
+        return sort(filtered, sort) { file ->
+            MediaLibraryMetadata(
+                displayName = file.displayName,
+                mimeType = file.mimeType,
+                sizeBytes = file.sizeBytes,
+                dateModifiedMillis = file.dateModifiedMillis,
+                albumName = file.albumName
+            )
         }
     }
 
-    fun albums(media: List<MediaFile>): List<String> = media
-        .mapNotNull { it.albumName?.trim()?.takeIf(String::isNotEmpty) }
+    fun <T> sort(
+        items: List<T>,
+        sort: MediaLibrarySort,
+        metadata: (T) -> MediaLibraryMetadata
+    ): List<T> = when (sort) {
+        MediaLibrarySort.NEWEST ->
+            items.sortedByDescending { metadata(it).dateModifiedMillis ?: Long.MIN_VALUE }
+        MediaLibrarySort.NAME_ASCENDING ->
+            items.sortedBy { metadata(it).displayName.lowercase() }
+        MediaLibrarySort.LARGEST_FIRST ->
+            items.sortedByDescending { metadata(it).sizeBytes ?: Long.MIN_VALUE }
+        MediaLibrarySort.SMALLEST_FIRST ->
+            items.sortedBy { metadata(it).sizeBytes ?: Long.MAX_VALUE }
+    }
+
+    fun <T> List<T>.filterByAlbum(
+        album: String?,
+        albumName: (T) -> String?
+    ): List<T> = if (album == null) this else filter {
+        albumName(it).equals(album, ignoreCase = true)
+    }
+
+    fun albumNames(names: Iterable<String?>): List<String> = names
+        .mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
         .distinctBy { it.lowercase() }
         .sortedBy { it.lowercase() }
+
+    fun albums(media: List<MediaFile>): List<String> =
+        albumNames(media.map { it.albumName })
 
     fun matches(
         displayName: String,
