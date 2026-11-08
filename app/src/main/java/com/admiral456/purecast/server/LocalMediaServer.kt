@@ -420,7 +420,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
         val valid = normalized.indices.all { index ->
             val character = normalized[index]
             index == slash || character in 'a'..'z' || character in '0'..'9' ||
-                character in "!#&^_.+-" || character == '
+                character in "!#&^_.+-"
         }
         return if (valid) normalized else "application/octet-stream"
     }
