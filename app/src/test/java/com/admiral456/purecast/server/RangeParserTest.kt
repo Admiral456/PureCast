@@ -66,6 +66,13 @@ class RangeParserTest {
     }
 
     @Test
+    fun rejectsExplicitPlusSignsInRangeNumbers() {
+        assertNull(RangeParser.parse("bytes=+1-10", 100))
+        assertNull(RangeParser.parse("bytes=1-+10", 100))
+        assertNull(RangeParser.parse("bytes=-+10", 100))
+    }
+
+    @Test
     fun maximumValidRangeLengthDoesNotOverflow() {
         assertEquals(
             Long.MAX_VALUE,
