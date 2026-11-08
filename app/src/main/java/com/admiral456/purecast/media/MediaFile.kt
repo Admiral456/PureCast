@@ -12,7 +12,8 @@ data class MediaFile(
     val sizeBytes: Long?
 ) {
     val isImage: Boolean get() = ImageFormatCatalog.isImageMimeType(mimeType)
-    val isVideo: Boolean get() = mimeType.startsWith("video/")
+    val isVideo: Boolean get() = mimeType.substringBefore(';').trim().startsWith("video/", ignoreCase = true)
+    val isPlayableMedia: Boolean get() = isImage || isVideo
 
     companion object {
         private val knownMimeTypes = mapOf(
