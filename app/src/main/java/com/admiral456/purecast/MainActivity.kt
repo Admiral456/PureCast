@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -30,6 +31,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -83,6 +85,8 @@ import com.admiral456.purecast.media.MediaKindFilter
 import com.admiral456.purecast.media.MediaLibraryFilter
 import com.admiral456.purecast.media.MediaThumbnailLoader
 import com.admiral456.purecast.media.MediaTechnicalInfo
+import com.admiral456.purecast.media.MediaStoreGallery
+import com.admiral456.purecast.permissions.GalleryAccessPolicy
 import com.admiral456.purecast.group.GroupQueueClient
 import com.admiral456.purecast.group.GroupQueueCredentials
 import com.admiral456.purecast.group.GroupQueueEntry
@@ -102,6 +106,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val MAX_SELECTED_MEDIA = 50
+private const val MAX_GALLERY_SCAN_ITEMS = 250
 
 private val PureCastLight = lightColorScheme(
     primary = Color(0xFF4059D6),
@@ -165,7 +170,10 @@ private fun PureCastScreen() {
     var mediaKindFilter by remember { mutableStateOf(MediaKindFilter.ALL) }
     val visibleFiles = MediaLibraryFilter.filter(selectedFiles, mediaSearchQuery, mediaKindFilter)
     var isScanning by remember { mutableStateOf(false) }
-    var busyLabel by remember { mutableStateOf<String?>(null) }
+    var galleryAccess by remember { mutableStateOf(GalleryAccessPolicy.read(appContext)) }
+    var showGalleryAccessExplanation by remember { mutableStateOf(false) }
+    var isLoadingDeviceGallery by remember { mutableStateOf(false) }
+    var busyLabel by remember { mutableStateOf<String?>(null)
     var status by remember { mutableStateOf("Připoj telefon a televizi ke stejné Wi-Fi síti.") }
     var isError by remember { mutableStateOf(false) }
     var playingDevice by remember { mutableStateOf<DlnaDevice?>(null) }
@@ -266,6 +274,68 @@ private fun PureCastScreen() {
                 status = "Připraveno ${selectedFiles.size} souborů. Vyber televizi a spusť přehrávání."
             }
         }
+    }
+
+    fun loadDeviceGallery() {
+        val currentAccess = GalleryAccessPolicy.read(appContext)
+        galleryAccess = currentAccess
+        if (!currentAccess.hasAnyAccess) {
+            status = "Přístup ke galerii není povolen. Stále můžeš použít výběr fotek nebo správce souborů."
+            isError = true
+            return
+        }
+        scope.launch {
+            isLoadingDeviceGallery = true
+            isError = false
+            try {
+                val mediaUris = MediaStoreGallery.latestMediaUris(
+                    context = appContext,
+                    includeImages = currentAccess.canQueryImages,
+                    includeVideos = currentAccess.canQueryVideos,
+                    limit = MAX_GALLERY_SCAN_ITEMS
+                )
+                if (mediaUris.isEmpty()) {
+                    status = "V galerii nejsou žádné fotky ani videa dostupné pro aktuální oprávnění."
+                } else {
+                    importMediaUris(mediaUris, appendToLibrary = true)
+                }
+            } catch (_: SecurityException) {
+                galleryAccess = GalleryAccessPolicy.read(appContext)
+                isError = true
+                status = "Android změnil přístup ke galerii. Zkontroluj oprávnění a zkus to znovu."
+            } catch (error: Exception) {
+                isError = true
+                status = error.message ?: "Galerii telefonu se nepodařilo načíst."
+            } finally {
+                isLoadingDeviceGallery = false
+            }
+        }
+    }
+
+    val galleryPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        galleryAccess = GalleryAccessPolicy.read(appContext)
+        status = if (galleryAccess.hasAnyAccess) {
+            "Oprávnění aktualizováno: ${galleryAccess.label.lowercase(Locale.getDefault())}."
+        } else {
+            "Přístup ke galerii nebyl povolen. Výběr fotek a správce souborů můžeš používat dál."
+        }
+        isError = !galleryAccess.hasAnyAccess
+    }
+
+    val gallerySettingsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        galleryAccess = GalleryAccessPolicy.read(appContext)
+        status = galleryAccess.label
+    }
+
+    fun openGalleryAppSettings() {
+        val settingsIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", context.packageName, null)
+        }
+        gallerySettingsLauncher.launch(settingsIntent)
     }
 
     val mediaPicker = rememberLauncherForActivityResult(
@@ -645,6 +715,35 @@ private fun PureCastScreen() {
                 busyLabel = null
             }
         }
+    }
+
+    if (showGalleryAccessExplanation) {
+        AlertDialog(
+            onDismissRequest = { showGalleryAccessExplanation = false },
+            title = { Text("Povolit přístup k fotkám a videím?") },
+            text = {
+                Text(
+                    "PureCast chce zobrazit fotografie a videa v galerii, abys je mohl rychle vybrat a odeslat do televize. " +
+                        "Android může nabídnout úplný přístup, přístup jen k vybraným položkám nebo zamítnutí. " +
+                        "Soubory se nepřevádějí a bez tohoto oprávnění můžeš dál používat samostatný výběr fotek a správce souborů."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showGalleryAccessExplanation = false
+                        galleryPermissionLauncher.launch(
+                            GalleryAccessPolicy.permissionsForSdk(android.os.Build.VERSION.SDK_INT)
+                        )
+                    }
+                ) { Text("Pokračovat") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGalleryAccessExplanation = false }) {
+                    Text("Teď ne")
+                }
+            }
+        )
     }
 
     LazyColumn(
