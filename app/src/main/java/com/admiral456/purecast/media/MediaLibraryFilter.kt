@@ -37,7 +37,7 @@ object MediaLibraryFilter {
         sort: MediaLibrarySort,
         album: String? = null
     ): List<MediaFile> {
-        val filtered = filter(media, query, kind).filterByAlbum(album) { it.albumName }
+        val filtered = filterByAlbum(filter(media, query, kind), album) { it.albumName }
         return sort(filtered, sort) { file ->
             MediaLibraryMetadata(
                 displayName = file.displayName,
@@ -64,10 +64,11 @@ object MediaLibraryFilter {
             items.sortedBy { metadata(it).sizeBytes ?: Long.MAX_VALUE }
     }
 
-    fun <T> List<T>.filterByAlbum(
+    fun <T> filterByAlbum(
+        items: List<T>,
         album: String?,
         albumName: (T) -> String?
-    ): List<T> = if (album == null) this else filter {
+    ): List<T> = if (album == null) items else items.filter {
         albumName(it).equals(album, ignoreCase = true)
     }
 
