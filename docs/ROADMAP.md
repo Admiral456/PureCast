@@ -8,6 +8,10 @@
 - [x] TV brand/platform classification from UPnP descriptions.
 - [x] Czech light/dark UI.
 - [x] Photo Picker selection and URI permission retention where supported.
+- [x] Version-aware gallery runtime permissions for Android 12 and older, Android 13, and Android 14+.
+- [x] Android 14+ selected-photo and video access, including full, limited, images-only and videos-only states.
+- [x] In-app gallery permission rationale, status, gallery loading and shortcut to app permission settings.
+- [x] Keep Photo Picker and document picker available when broad gallery access is denied.
 - [x] SSDP discovery for UPnP MediaRenderer devices.
 - [x] Prefer active Wi-Fi route for SSDP requests and TV-description retrieval.
 - [x] Prefer an active Wi-Fi IPv4 address when creating TV playback links.
