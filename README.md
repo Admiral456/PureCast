@@ -14,7 +14,7 @@ PureCast is an Android application for sending original photos and videos from p
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.14.0
+## Current implementation — 0.15.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes, custom adaptive PureCast launcher icon.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
@@ -35,6 +35,8 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - Modern image thumbnails and image dimensions use Android ImageDecoder on API 28+ with bounded decode sizes, falling back to BitmapFactory if the platform's modern decoder fails; older Android versions use BitmapFactory for formats available on that system.
 - Image and video thumbnail previews, lazily loaded as gallery items become visible, with memory-conscious handling for older Android versions.
 - Gallery search by filename and photo/video filters.
+- Media library sorting by newest available modification date, filename and file size, with unknown metadata kept at the end.
+- Album filters based on Android MediaStore bucket names when the content provider exposes them; document-picker items without album metadata remain available under all albums.
 - Progressive technical metadata inspection in small batches, with cancellation when a new selection replaces the previous one.
 - Technical metadata inspection for image size and video resolution, frame rate, video/audio MIME codecs, bitrate, duration and available HDR transfer metadata.
 - Unit tests for HTTP range handling, bounded network response reads, invite-code rate limiting and expiry, UPnP time values, DLNA MIME profiles and sender/receiver brand classification.
