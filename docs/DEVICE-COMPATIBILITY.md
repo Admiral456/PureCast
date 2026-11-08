@@ -42,7 +42,7 @@ Aplikace může použít DLNA/UPnP u kompatibilních televizorů dalších znač
 - Každý telefon může nezávisle vybrat a odeslat svoje fotografie a videa.
 - Více telefonů může používat stejnou televizi postupně.
 - Běžný DLNA renderer přehrává jednu aktuální položku. Nový příkaz od jiného telefonu může právě přehrávanou položku nahradit.
-- Sdílená skupinová fronta s řízením oprávnění není zatím implementována.
+- Sdílená skupinová fronta umožňuje více telefonům přidat vlastní média; hostitel řídí pořadí a DLNA přehrávání.
 
 ## Obrazové formáty a jejich omezení
 
