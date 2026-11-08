@@ -222,7 +222,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
                 val output = BufferedOutputStream(client.getOutputStream())
                 val response = StringBuilder()
                     .append("HTTP/1.1 ").append(status).append("\r\n")
-                    .append("Content-Type: ").append(safeHeaderValue(published.media.mimeType)).append("\r\n")
+                    .append("Content-Type: ").append(safeContentType(published.media.mimeType)).append("\r\n")
                     .append("Content-Disposition: inline\r\n")
                     .append("Accept-Ranges: ").append(if (totalLength > 0L) "bytes" else "none").append("\r\n")
                     .append("Cache-Control: no-store\r\n")
@@ -255,7 +255,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
 
     private fun writeBrowserPlayer(socket: Socket, method: String, token: String, media: MediaFile) {
         val escapedName = htmlEscape(media.displayName)
-        val safeMime = htmlEscape(media.mimeType)
+        val safeMime = htmlEscape(safeContentType(media.mimeType))
         val mediaPath = "/media/$token"
         val content = if (media.isImage) {
             "<img id=\"picture\" data-mime=\"$safeMime\" src=\"$mediaPath\" alt=\"$escapedName\">"
@@ -413,8 +413,17 @@ class LocalMediaServer(private val context: Context) : Closeable {
         output.flush()
     }
 
-    private fun safeHeaderValue(value: String): String =
-        value.replace("\r", "").replace("\n", "").ifBlank { "application/octet-stream" }
+    private fun safeContentType(value: String): String {
+        val normalized = value.substringBefore(';').trim().lowercase()
+        val slash = normalized.indexOf('/')
+        if (slash <= 0 || slash != normalized.lastIndexOf('/')) return "application/octet-stream"
+        val valid = normalized.indices.all { index ->
+            index == slash || normalized[index].isLetterOrDigit() ||
+                normalized[index] in "!#    private fun safeHeaderValue(value: String): String =
+        value.replace("\r", "").replace("\n", "").ifBlank { "application/octet-stream" }^_.+-"
+        }
+        return if (valid) normalized else "application/octet-stream"
+    }
 
     private fun htmlEscape(value: String): String =
         value.replace("&", "&amp;").replace("<", "&lt;")
