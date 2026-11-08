@@ -173,7 +173,7 @@ private fun PureCastScreen() {
     var galleryAccess by remember { mutableStateOf(GalleryAccessPolicy.read(appContext)) }
     var showGalleryAccessExplanation by remember { mutableStateOf(false) }
     var isLoadingDeviceGallery by remember { mutableStateOf(false) }
-    var busyLabel by remember { mutableStateOf<String?>(null)
+    var busyLabel by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf("Připoj telefon a televizi ke stejné Wi-Fi síti.") }
     var isError by remember { mutableStateOf(false) }
     var playingDevice by remember { mutableStateOf<DlnaDevice?>(null) }
@@ -896,6 +896,63 @@ private fun PureCastScreen() {
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Přístup k galerii", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    StatusMessage(
+                        text = galleryAccess.label,
+                        error = !galleryAccess.hasAnyAccess
+                    )
+                    Text(
+                        when (galleryAccess.kind) {
+                            com.admiral456.purecast.permissions.GalleryAccessKind.FULL ->
+                                "PureCast může zobrazit fotky a videa z galerie."
+                            com.admiral456.purecast.permissions.GalleryAccessKind.SELECTED ->
+                                "Android zpřístupní pouze fotky a videa, které jsi vybral. Přístup můžeš kdykoliv změnit."
+                            com.admiral456.purecast.permissions.GalleryAccessKind.IMAGES_ONLY ->
+                                "Přístup je povolen pouze k fotografiím."
+                            com.admiral456.purecast.permissions.GalleryAccessKind.VIDEOS_ONLY ->
+                                "Přístup je povolen pouze k videím."
+                            com.admiral456.purecast.permissions.GalleryAccessKind.NONE ->
+                                "Povol přístup, aby PureCast mohl nabídnout obsah galerie. Bez něj můžeš dál vybírat jednotlivé soubory ručně."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Button(
+                            onClick = { showGalleryAccessExplanation = true },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(14.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                        ) {
+                            Text(if (galleryAccess.hasAnyAccess) "Změnit přístup" else "Povolit přístup")
+                        }
+                        OutlinedButton(
+                            onClick = { openGalleryAppSettings() },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(14.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                        ) {
+                            Text("Nastavení")
+                        }
+                    }
+                    Button(
+                        onClick = { loadDeviceGallery() },
+                        enabled = galleryAccess.hasAnyAccess && !isLoadingDeviceGallery,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        if (isLoadingDeviceGallery) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.width(18.dp).height(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Načítám galerii…")
+                        } else {
+                            Text("Načíst fotky a videa z galerie")
+                        }
+                    }
                     OutlinedButton(
                         onClick = {
                             mediaPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
