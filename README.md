@@ -14,7 +14,7 @@ PureCast is an Android application for sending original photos and videos from p
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.9.0
+## Current implementation — 0.10.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes, custom adaptive PureCast launcher icon.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
@@ -26,7 +26,10 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - Local HTTP streaming of the original selected URI with byte-range support, Wi-Fi-interface binding, bounded client concurrency and active-connection cleanup.
 - TV browser fallback page with responsive playback UI and a basic HTML5 MIME support hint.
 - Foreground media-playback service to keep streaming active when the app is backgrounded or the display turns off.
-- Android Photo Picker with persistent URI permission when the provider supports it.
+- Android Photo Picker plus a multi-select Android document picker for image/video files and less common formats, with persistent URI permission where supported.
+- Image MIME recognition by extension for JPG/JPEG, PNG/APNG, GIF, WebP, HEIC/HEIF, AVIF, JPEG XL, TIFF, BMP, SVG, JPEG 2000, common camera RAW formats, and additional image types.
+- Original image MIME types are retained for DLNA and TV-browser requests; known extensions take precedence over generic or incorrect provider MIME labels.
+- Modern image thumbnails and image dimensions use Android ImageDecoder on API 28+ with bounded decode sizes; older Android versions use BitmapFactory for formats available on that system.
 - Image and video thumbnail previews, lazily loaded as gallery items become visible, with memory-conscious handling for older Android versions.
 - Gallery search by filename and photo/video filters.
 - Progressive technical metadata inspection in small batches, with cancellation when a new selection replaces the previous one.
@@ -83,13 +86,13 @@ PureCast does not bundle a video transcoder, codec framework, sample photos, sam
 - Direct Play preserves the bytes of the original file served by PureCast. It does not guarantee that the TV displays every pixel, frame rate, color format or HDR mode exactly as the source; that depends on the TV decoder and display pipeline.
 - DLNA ConnectionManager MIME profiles are only an advertised container/content-type hint. They do not prove support for a particular video/audio codec, frame rate, bitrate, HDR profile or resolution.
 - The browser playback page uses the TV browser's own media engine. A browser MIME hint is not proof that a particular codec/bitrate/HDR combination will play.
-- Unsupported or unverified media is not silently converted.
+- Unsupported or unverified media is not silently converted. JPEG XL, SVG, camera RAW and other less common formats may be passed through without a local thumbnail; display still depends on the TV decoder/browser.
 - The HTTP server currently supports single byte ranges; multipart ranges are not implemented.
 - Foreground streaming continues while Android keeps the foreground service alive. Battery-saver policies and force-stop can still interrupt it.
 - This build targets Android API 36. Before raising target SDK to Android 17/API 37, implement and request the runtime `ACCESS_LOCAL_NETWORK` permission.
 
 ## Hardware test status
 
-CI verifies compilation, unit tests and APK packaging. It does **not** prove that a physical Samsung or LG television accepts playback. Samsung publishes model-group-specific decoder specifications, so exact model and firmware testing is required.
+CI verifies compilation, unit tests and APK packaging. It does **not** prove that a physical Samsung or LG television accepts playback. Samsung publishes model-group-specific decoder specifications, so exact model and firmware testing is required. Android's image decoder support does not guarantee support on the TV.
 
 See [docs/APK-SIZE-AUDIT.md](docs/APK-SIZE-AUDIT.md) for the measured package-size analysis, [docs/DEVICE-COMPATIBILITY.md](docs/DEVICE-COMPATIBILITY.md), [docs/MULTI-PHONE.md](docs/MULTI-PHONE.md) and [docs/ROADMAP.md](docs/ROADMAP.md).
