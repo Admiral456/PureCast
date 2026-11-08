@@ -436,8 +436,7 @@ private fun PureCastScreen() {
                 val server = withContext(Dispatchers.IO) {
                     GroupQueueServer(
                         appContext,
-                        "${senderInfo.brand.displayName} ${senderInfo.model}",
-                        appContext
+                        "${senderInfo.brand.displayName} ${senderInfo.model}"
                     ).also { it.start() }
                 }
                 groupServer = server
@@ -468,7 +467,8 @@ private fun PureCastScreen() {
                     GroupQueueClient.join(
                         groupAddressInput,
                         groupCodeInput,
-                        "${senderInfo.brand.displayName} ${senderInfo.model}"
+                        "${senderInfo.brand.displayName} ${senderInfo.model}",
+                        appContext
                     )
                 }
                 sharedCredentials = joined.credentials
