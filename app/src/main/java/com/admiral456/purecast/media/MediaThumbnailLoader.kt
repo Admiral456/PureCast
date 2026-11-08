@@ -3,9 +3,11 @@ package com.admiral456.purecast.media
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.util.Size
+import kotlin.math.roundToInt
 
 object MediaThumbnailLoader {
     fun load(
@@ -15,13 +17,14 @@ object MediaThumbnailLoader {
         targetHeight: Int = 240
     ): Bitmap? {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            runCatching {
-                return context.contentResolver.loadThumbnail(
+            val providerThumbnail = runCatching {
+                context.contentResolver.loadThumbnail(
                     media.uri,
                     Size(targetWidth, targetHeight),
                     null
                 )
-            }
+            }.getOrNull()
+            if (providerThumbnail != null) return providerThumbnail
         }
 
         if (media.isVideo) return loadVideoFrame(context, media, targetWidth, targetHeight)
@@ -67,6 +70,23 @@ object MediaThumbnailLoader {
         targetHeight: Int
     ): Bitmap? {
         return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val source = ImageDecoder.createSource(context.contentResolver, media.uri)
+                return ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                    val sourceWidth = info.size.width.coerceAtLeast(1)
+                    val sourceHeight = info.size.height.coerceAtLeast(1)
+                    val scale = minOf(
+                        1f,
+                        targetWidth.toFloat() / sourceWidth,
+                        targetHeight.toFloat() / sourceHeight
+                    )
+                    decoder.setTargetSize(
+                        (sourceWidth * scale).roundToInt().coerceAtLeast(1),
+                        (sourceHeight * scale).roundToInt().coerceAtLeast(1)
+                    )
+                }.fitInside(targetWidth, targetHeight)
+            }
+
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             context.contentResolver.openInputStream(media.uri)?.use {
                 BitmapFactory.decodeStream(it, null, bounds)
