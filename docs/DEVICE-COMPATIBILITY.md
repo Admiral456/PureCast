@@ -46,7 +46,7 @@ Aplikace může použít DLNA/UPnP u kompatibilních televizorů dalších znač
 
 ## Obrazové formáty a jejich omezení
 
-PureCast rozpoznává obrazové soubory podle MIME typu i běžných přípon a předává jejich původní bajty bez převodu. Kromě JPG/JPEG a PNG zahrnuje GIF, APNG, WebP, HEIC/HEIF, AVIF, JPEG XL, TIFF, BMP, SVG, ICO, JPEG 2000, DNG a běžné RAW přípony fotoaparátů (ARW, CR2/CR3, NEF, NRW, ORF, PEF, RAF, RW2 a SRW).
+PureCast rozpoznává obrazové soubory podle MIME typu i běžných přípon a předává jejich původní bajty bez převodu. Kromě JPG/JPEG a PNG zahrnuje GIF, APNG, WebP, HEIC/HEIF, AVIF, JPEG XL, TIFF, BMP, SVG, ICO, JPEG 2000, OpenEXR, DDS, KTX/KTX2, FITS, QOI, DNG a běžné RAW přípony fotoaparátů (ARW, CR2/CR3/CRW, NEF, NRW, ORF, PEF, RAF, RW2, SRW a další).
 
 | Skupina formátů | Chování PureCast | Omezení |
 |---|---|---|
@@ -55,10 +55,11 @@ PureCast rozpoznává obrazové soubory podle MIME typu i běžných přípon a 
 | AVIF | Rozpoznání, systémový náhled na podporovaném Androidu a originální přenos | 10bitové varianty nejsou zaručené na každém zařízení |
 | APNG, TIFF, JPEG 2000, SVG, ICO | Rozpoznání MIME a originální přenos | Místní náhled a TV podpora závisí na systémovém dekodéru/prohlížeči |
 | JPEG XL a RAW z fotoaparátů | Rozpoznání přípony/MIME a originální přenos | Nativní náhled Androidu nebo dekódování TV nemusí být dostupné |
+| OpenEXR, DDS, KTX/KTX2, FITS a QOI | Rozpoznání MIME a originální přenos | Specializované formáty; běžné televizory je nemusí umět zobrazit |
 
-Výběr přes **Procházet soubory a další formáty** používá systémový správce souborů a doplňuje běžný Photo Picker. Díky tomu lze vybrat také soubory, které správce fotek v telefonu nezobrazuje.
+Výběr přes **Procházet soubory a další formáty** používá systémový správce souborů a doplňuje běžný Photo Picker. Díky tomu lze vybrat také soubory, které správce fotek v telefonu nezobrazuje. PDF a jiné nerozpoznané dokumenty jsou při importu přeskočeny a nelze je přidat do přehrávací fronty.
 
-Android API 28+ používá ImageDecoder pro systémově podporované náhledy a čtení rozměrů s omezenou cílovou velikostí. Neznámý nebo nepodporovaný obrazový dekodér nebrání samotnému přenosu: PureCast se pokusí poslat originál, ale televize může formát odmítnout.
+Android API 28+ používá ImageDecoder pro systémově podporované náhledy a čtení rozměrů s omezenou cílovou velikostí; při chybě se zkusí BitmapFactory. Neznámý nebo nepodporovaný obrazový dekodér nebrání samotnému přenosu: PureCast se pokusí poslat originál, ale televize může formát odmítnout. V režimu TV prohlížeče aplikace zobrazuje výsledek načtení obrázku a případné rozlišení dekódovaného obrázku.
 
 ## Co aplikace ověřuje
 
