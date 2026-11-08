@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.wifi.WifiManager
 import android.net.Network
 import com.admiral456.purecast.network.WifiNetworkResolver
+import com.admiral456.purecast.network.readTextLimited
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -102,7 +103,10 @@ class DlnaDiscovery(context: Context) {
                 isXIncludeAware = false
                 isExpandEntityReferences = false
             }
-            val document = connection.inputStream.use { factory.newDocumentBuilder().parse(it) }
+            val descriptionXml = connection.inputStream.use {
+                it.readTextLimited(MAX_DEVICE_DESCRIPTION_BYTES)
+            }
+            val document = factory.newDocumentBuilder().parse(descriptionXml.byteInputStream(Charsets.UTF_8))
             val allDevices = document.getElementsByTagName("device")
             var renderer: Element? = null
             for (index in 0 until allDevices.length) {
@@ -161,3 +165,6 @@ class DlnaDiscovery(context: Context) {
         return if (nodes.length > 0) nodes.item(0).textContent?.trim().orEmpty() else ""
     }
 }
+
+
+private const val MAX_DEVICE_DESCRIPTION_BYTES = 1_048_576
