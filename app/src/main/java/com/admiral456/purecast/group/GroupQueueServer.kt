@@ -33,7 +33,7 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
     private val participants = linkedMapOf<String, GroupQueueParticipant>()
     private val tokens = ConcurrentHashMap<String, String>()
     private val entries = mutableListOf<GroupQueueEntry>()
-    private val failedAttempts = mutableMapOf<String, JoinAttempt>()
+    private val joinLimiter = GroupQueueJoinLimiter()
     private val clientSockets = ConcurrentHashMap.newKeySet<Socket>()
     private val executor = ThreadPoolExecutor(
         MIN_CLIENT_THREADS,
@@ -50,8 +50,6 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
     @Volatile private var baseUrl: String? = null
     @Volatile private var revision = 0L
     @Volatile private var currentEntryId: String? = null
-
-    private data class JoinAttempt(val startedAt: Long, val count: Int)
 
     init {
         participants[hostId] = GroupQueueParticipant(hostId, cleanName(hostDisplayName), true)
@@ -231,10 +229,15 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
         val id = UUID.randomUUID().toString()
         val token = createSecret()
         synchronized(lock) {
+            if (participants.size >= MAX_PARTICIPANTS) {
+                respond(socket, 409, error("Skupina už dosáhla limitu $MAX_PARTICIPANTS telefonů."))
+                return
+            }
             participants[id] = GroupQueueParticipant(id, name, false)
             tokens[token] = id
             revision++
         }
+        joinLimiter.recordSuccess(request.remote)
         respond(socket, 200, JSONObject()
             .put("accessToken", token)
             .put("participantId", id)
@@ -348,20 +351,9 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
 
     private fun isHost(id: String) = synchronized(lock) { participants[id]?.isHost == true }
 
-    private fun allowAttempt(remote: String) = synchronized(failedAttempts) {
-        val attempt = failedAttempts[remote] ?: return@synchronized true
-        System.currentTimeMillis() - attempt.startedAt <= JOIN_WINDOW_MS && attempt.count < MAX_JOIN_ATTEMPTS
-    }
+    private fun allowAttempt(remote: String) = joinLimiter.canAttempt(remote)
 
-    private fun recordFailure(remote: String) = synchronized(failedAttempts) {
-        val now = System.currentTimeMillis()
-        val old = failedAttempts[remote]
-        failedAttempts[remote] = if (old == null || now - old.startedAt > JOIN_WINDOW_MS) {
-            JoinAttempt(now, 1)
-        } else {
-            old.copy(count = old.count + 1)
-        }
-    }
+    private fun recordFailure(remote: String) = joinLimiter.recordFailure(remote)
 
     private fun validMediaUrl(value: String): Boolean {
         if (value.length !in 1..MAX_URL_LENGTH) return false
@@ -448,9 +440,8 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
         private const val MAX_QUEUED_CLIENTS = 24
         private const val CLIENT_KEEP_ALIVE_SECONDS = 30L
         private const val MAX_ENTRIES = 100
+        private const val MAX_PARTICIPANTS = 16
         private const val MAX_URL_LENGTH = 2_048
-        private const val MAX_JOIN_ATTEMPTS = 10
-        private const val JOIN_WINDOW_MS = 60_000L
         private val IPV4_PATTERN = Regex("^\\d{1,3}(?:\\.\\d{1,3}){3}$")
         private val MEDIA_PATH_PATTERN = Regex("^/media/[A-Za-z0-9_-]{12}$")
         private val random = SecureRandom()
