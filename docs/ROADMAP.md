@@ -63,6 +63,7 @@
 - [x] Shared queue previous/next navigation and stop-at-boundaries behavior.
 - [x] Show sender identity for items submitted to a shared queue.
 - [x] Pair participants using a short invite code and issue per-participant high-entropy access tokens.
+- [x] Rate-limit incorrect invite codes with bounded per-IP tracking, expiry and unit tests; cap shared sessions at 16 participants.
 - [x] Validate shared media URLs as private IPv4 PureCast media-token endpoints.
 - [ ] Improve per-device compatibility profiles from actual UPnP protocolInfo and test results.
 - [ ] Improve friendly error explanations for Wi-Fi isolation, unsupported format and expired file URI access.
