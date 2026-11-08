@@ -35,6 +35,12 @@
 - [x] Normalize MIME types and DLNA protocolInfo parameters before compatibility checks.
 - [x] Add actual image load/error feedback and decoded dimensions to the TV-browser player.
 - [x] Skip non-image and non-video documents from the document picker.
+- [x] Route DLNA SOAP commands and shared-queue client requests over the active Wi-Fi network when available.
+- [x] Fail clearly if the SSDP multicast socket cannot bind to the selected Wi-Fi network.
+- [x] Limit UPnP device descriptions, SOAP replies and shared-queue JSON replies to 1 MiB before parsing.
+- [x] Verify TV-browser image element wiring in the packaged APK.
+- [x] Validate MIME values before using them in HTTP response headers and TV-browser attributes.
+- [x] Enforce strict unsigned-decimal syntax for HTTP byte ranges.
 
 ## Milestone 1 — Samsung and LG real-device interoperability
 
