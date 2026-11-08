@@ -26,6 +26,10 @@ V sekci Fotky a videa se zobrazuje aktuální rozsah oprávnění. Uživatel mů
 
 Odmítnutí oprávnění neblokuje běžný Android Photo Picker ani výběr souborů. Tyto dva režimy umožňují odeslat konkrétní položky bez udělení přístupu k celé galerii.
 
+## Organizace galerie
+
+Knihovna umí řadit média podle dostupného data změny, názvu a velikosti souboru. U médií vrácených Android MediaStore může zobrazit také filtry podle alba/složky (bucket display name). U souborů z jiných poskytovatelů Androidu nemusí být datum ani album dostupné; tyto položky zůstávají v knihovně a řazení je nechává na konci, pokud příslušné metadata chybí.
+
 ## Televizory
 
 ### Samsung Smart TV
