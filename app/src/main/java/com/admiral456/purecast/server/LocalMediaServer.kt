@@ -276,14 +276,15 @@ class LocalMediaServer(private val context: Context) : Closeable {
                     const picture = document.getElementById('picture');
                     const result = document.getElementById('compatibility');
                     if (!picture || !result) return;
+                    const mime = picture.getAttribute('data-mime') || 'obrazový soubor';
                     const loaded = () => {
                       const dimensions = picture.naturalWidth && picture.naturalHeight
                         ? ' Rozlišení: ' + picture.naturalWidth + ' × ' + picture.naturalHeight + '.'
                         : '';
-                      result.textContent = 'Televizor zobrazil originální obrázek ($safeMime).' + dimensions;
+                      result.textContent = 'Televizor zobrazil originální obrázek (' + mime + ').' + dimensions;
                     };
                     const failed = () => {
-                      result.textContent = 'Prohlížeč televize nedokázal zobrazit $safeMime. Soubor zůstal beze změny; tento model možná nepodporuje jeho formát.';
+                      result.textContent = 'Prohlížeč televize nedokázal zobrazit ' + mime + '. Soubor zůstal beze změny; tento model možná nepodporuje jeho formát.';
                     };
                     picture.addEventListener('error', failed, { once: true });
                     if (picture.complete) {
