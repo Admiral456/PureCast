@@ -4,6 +4,7 @@ import android.content.Context
 import com.admiral456.purecast.network.WifiNetworkResolver
 import com.admiral456.purecast.network.readTextLimited
 import com.admiral456.purecast.media.MediaFile
+import com.admiral456.purecast.media.ImageFormatCatalog
 import java.net.HttpURLConnection
 import java.net.URL
 import javax.xml.parsers.DocumentBuilderFactory
@@ -113,7 +114,7 @@ class DlnaController(private val context: Context? = null) {
         didlMetadata(media.displayName, media.mimeType, mediaUrl)
 
     private fun didlMetadata(title: String, mimeType: String, mediaUrl: String): String {
-        val upnpClass = if (mimeType.startsWith("image/")) {
+        val upnpClass = if (ImageFormatCatalog.isImageMimeType(mimeType)) {
             "object.item.imageItem.photo"
         } else {
             "object.item.videoItem"
