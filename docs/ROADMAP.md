@@ -29,6 +29,9 @@
 - [x] APK smoke checks for DLNA commands, streaming paths, shared-queue API routes and playback UI markers.
 - [x] Publish exactly one standalone PureCast APK; keep comparison builds internal to CI.
 - [x] Add adaptive, round and monochrome PureCast launcher icons, verified inside the APK.
+- [x] Add an extension-to-MIME catalog for modern web formats, HEIF/HEIC, AVIF, JPEG XL, TIFF, SVG, JPEG 2000 and camera RAW.
+- [x] Add Android document picker for less common image formats alongside Photo Picker.
+- [x] Use bounded Android ImageDecoder thumbnails and dimensions for platform-supported formats.
 
 ## Milestone 1 — Samsung and LG real-device interoperability
 
