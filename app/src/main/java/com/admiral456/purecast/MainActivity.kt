@@ -3,6 +3,7 @@ package com.admiral456.purecast
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -99,6 +100,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private const val MAX_SELECTED_MEDIA = 50
 
 private val PureCastLight = lightColorScheme(
     primary = Color(0xFF4059D6),
@@ -197,52 +200,79 @@ private fun PureCastScreen() {
         }
     }
 
-    val mediaPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 50)
-    ) { uris ->
-        if (uris.isNotEmpty()) {
-            uris.forEach { uri ->
-                try {
-                    appContext.contentResolver.takePersistableUriPermission(
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    )
-                } catch (_: SecurityException) {
-                    // Some picker implementations provide temporary grants only.
-                } catch (_: IllegalArgumentException) {
-                    // Some picker implementations do not offer persistable grants.
-                }
-            }
-            mediaInspectionJob?.cancel()
-            mediaInspectionJob = scope.launch {
-                val files = withContext(Dispatchers.IO) {
-                    uris.mapNotNull { uri -> runCatching { MediaFile.fromUri(appContext, uri) }.getOrNull() }
-                }
-                technicalInfo.clear()
-                selectedFiles.clear()
-                selectedFiles.addAll(files)
-                mediaSearchQuery = ""
-                mediaKindFilter = MediaKindFilter.ALL
-                isError = files.isEmpty()
-                status = if (files.isEmpty()) {
-                    "Vybrané soubory se nepodařilo načíst."
-                } else {
-                    "Načteno ${files.size} souborů. Náhledy a technické údaje se připravují na pozadí."
-                }
-
-                files.chunked(3).forEach { batch ->
-                    val details = batch.map { file ->
-                        async(Dispatchers.IO) {
-                            runCatching {
-                                MediaInspector.inspect(appContext, file)?.let { file.uri.toString() to it }
-                            }.getOrNull()
-                        }
-                    }.awaitAll().filterNotNull()
-                    details.forEach { (uri, info) -> technicalInfo[uri] = info }
-                }
-                if (files.isNotEmpty()) status = "Připraveno ${files.size} souborů. Vyber televizi a spusť přehrávání."
+    fun importMediaUris(uris: List<Uri>, appendToLibrary: Boolean) {
+        if (uris.isEmpty()) return
+        uris.forEach { uri ->
+            try {
+                appContext.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: SecurityException) {
+                // Some picker implementations provide temporary grants only.
+            } catch (_: IllegalArgumentException) {
+                // Some picker implementations do not offer persistable grants.
             }
         }
+        mediaInspectionJob?.cancel()
+        mediaInspectionJob = scope.launch {
+            val importedFiles = withContext(Dispatchers.IO) {
+                uris.distinctBy { it.toString() }
+                    .mapNotNull { uri -> runCatching { MediaFile.fromUri(appContext, uri) }.getOrNull() }
+            }
+            val existingUris = if (appendToLibrary) selectedFiles.map { it.uri }.toSet() else emptySet()
+            val availableSlots = if (appendToLibrary) {
+                (MAX_SELECTED_MEDIA - selectedFiles.size).coerceAtLeast(0)
+            } else {
+                MAX_SELECTED_MEDIA
+            }
+            val files = importedFiles
+                .filterNot { it.uri in existingUris }
+                .take(availableSlots)
+
+            if (!appendToLibrary) {
+                technicalInfo.clear()
+                selectedFiles.clear()
+            }
+            selectedFiles.addAll(files)
+            mediaSearchQuery = ""
+            mediaKindFilter = MediaKindFilter.ALL
+            isError = files.isEmpty()
+            status = when {
+                files.isEmpty() && importedFiles.isEmpty() -> "Vybrané soubory se nepodařilo načíst."
+                files.isEmpty() && availableSlots == 0 -> "Knihovna už obsahuje maximum $MAX_SELECTED_MEDIA souborů."
+                files.isEmpty() -> "Vybrané soubory už v knihovně jsou."
+                importedFiles.size > files.size ->
+                    "Přidáno ${files.size} souborů. Knihovna podporuje nejvýše $MAX_SELECTED_MEDIA položek."
+                else -> "Načteno ${files.size} souborů. Náhledy a technické údaje se připravují na pozadí."
+            }
+
+            files.chunked(3).forEach { batch ->
+                val details = batch.map { file ->
+                    async(Dispatchers.IO) {
+                        runCatching {
+                            MediaInspector.inspect(appContext, file)?.let { file.uri.toString() to it }
+                        }.getOrNull()
+                    }
+                }.awaitAll().filterNotNull()
+                details.forEach { (uri, info) -> technicalInfo[uri] = info }
+            }
+            if (files.isNotEmpty()) {
+                status = "Připraveno ${selectedFiles.size} souborů. Vyber televizi a spusť přehrávání."
+            }
+        }
+    }
+
+    val mediaPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = MAX_SELECTED_MEDIA)
+    ) { uris ->
+        importMediaUris(uris, appendToLibrary = false)
+    }
+
+    val documentPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        importMediaUris(uris, appendToLibrary = true)
     }
 
     fun playOn(device: DlnaDevice, file: MediaFile) {
@@ -770,6 +800,20 @@ private fun PureCastScreen() {
                     ) {
                         Text("＋  Vybrat fotky a videa")
                     }
+                    OutlinedButton(
+                        onClick = {
+                            documentPicker.launch(arrayOf("image/*", "video/*", "application/octet-stream"))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Text("＋  Procházet soubory a další formáty")
+                    }
+                    Text(
+                        "Podporované typy zahrnují JPG, PNG, GIF, WebP, HEIC/HEIF, AVIF, TIFF, BMP, SVG, JPEG XL a fotoaparátní RAW. Náhled závisí na Androidu; zvolený soubor se vždy odesílá v originálu.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Vybrané soubory", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.weight(1f))
