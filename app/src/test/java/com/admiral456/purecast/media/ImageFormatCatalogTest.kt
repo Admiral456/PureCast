@@ -40,6 +40,26 @@ class ImageFormatCatalogTest {
     }
 
     @Test
+    fun recognizesScientificAndGpuImageFormats() {
+        assertEquals("image/fits", ImageFormatCatalog.mimeTypeForExtension("fits"))
+        assertEquals("image/qoi", ImageFormatCatalog.mimeTypeForExtension("qoi"))
+        assertEquals("image/x-exr", ImageFormatCatalog.mimeTypeForExtension("exr"))
+        assertEquals("image/vnd-ms.dds", ImageFormatCatalog.mimeTypeForExtension("dds"))
+        assertEquals("image/ktx", ImageFormatCatalog.mimeTypeForExtension("ktx"))
+        assertEquals("image/ktx2", ImageFormatCatalog.mimeTypeForExtension("ktx2"))
+    }
+
+    @Test
+    fun recognizesAdditionalCameraRawExtensions() {
+        assertEquals("image/x-canon-crw", ImageFormatCatalog.mimeTypeForExtension("crw"))
+        assertEquals("image/x-minolta-mrw", ImageFormatCatalog.mimeTypeForExtension("mrw"))
+        assertEquals("image/x-sigma-x3f", ImageFormatCatalog.mimeTypeForExtension("x3f"))
+        assertEquals("image/x-hasselblad-3fr", ImageFormatCatalog.mimeTypeForExtension("3fr"))
+        assertEquals("image/x-phaseone-iiq", ImageFormatCatalog.mimeTypeForExtension("iiq"))
+        assertEquals("image/x-kodak-dcr", ImageFormatCatalog.mimeTypeForExtension("dcr"))
+    }
+
+    @Test
     fun recognizesExtensionsInDisplayNamesCaseInsensitively() {
         assertEquals("image/avif", ImageFormatCatalog.mimeTypeForFileName("Holiday.PICTURE.AVIF"))
         assertEquals("image/jpeg", ImageFormatCatalog.mimeTypeForFileName("photo.JFIF"))
