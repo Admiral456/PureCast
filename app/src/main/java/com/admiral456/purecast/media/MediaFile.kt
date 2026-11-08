@@ -11,21 +11,11 @@ data class MediaFile(
     val mimeType: String,
     val sizeBytes: Long?
 ) {
-    val isImage: Boolean get() = mimeType.startsWith("image/")
+    val isImage: Boolean get() = ImageFormatCatalog.isImageMimeType(mimeType)
     val isVideo: Boolean get() = mimeType.startsWith("video/")
 
     companion object {
         private val knownMimeTypes = mapOf(
-            "jpg" to "image/jpeg",
-            "jpeg" to "image/jpeg",
-            "png" to "image/png",
-            "webp" to "image/webp",
-            "gif" to "image/gif",
-            "heic" to "image/heic",
-            "heif" to "image/heif",
-            "bmp" to "image/bmp",
-            "tif" to "image/tiff",
-            "tiff" to "image/tiff",
             "mp4" to "video/mp4",
             "m4v" to "video/x-m4v",
             "mkv" to "video/x-matroska",
@@ -58,12 +48,14 @@ data class MediaFile(
             }
 
             val extension = name.substringAfterLast('.', "").lowercase()
-            val providerMime = resolver.getType(uri)
-            val mimeFromExtension = knownMimeTypes[extension]
+            val providerMime = resolver.getType(uri)?.trim()?.lowercase()
+            val mimeFromExtension = ImageFormatCatalog.mimeTypeForExtension(extension)
+                ?: knownMimeTypes[extension]
                 ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
             val mimeType = when {
                 providerMime.isNullOrBlank() -> mimeFromExtension ?: "application/octet-stream"
-                providerMime == "application/octet-stream" && mimeFromExtension != null -> mimeFromExtension
+                providerMime in setOf("application/octet-stream", "binary/octet-stream") ->
+                    mimeFromExtension ?: providerMime
                 else -> providerMime
             }
             return MediaFile(uri, name, mimeType, size)
