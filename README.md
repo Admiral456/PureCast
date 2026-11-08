@@ -8,13 +8,13 @@ PureCast is an Android application for sending original photos and videos from p
 - Target phone families: Samsung Galaxy, Xiaomi and Redmi.
 - The same Android APK runs on all three families. Brand detection is used for diagnostics; the transfer implementation is manufacturer-neutral.
 - Other compatible Android phones are not blocked.
-- Multiple Android phones can contribute to a temporary shared queue on the same Wi-Fi network. One phone hosts the session and controls DLNA playback; each sender keeps and streams its own original media. Shared queue client requests also use the selected Wi-Fi route and bounded JSON response reads.
+- Multiple Android phones can contribute to a temporary shared queue on the same Wi-Fi network. One phone hosts the session and controls DLNA playback; each sender keeps and streams its own original media. Shared sessions cap membership at 16 phones, rate-limit incorrect invite codes, and bound rate-limit tracking memory. Shared queue client requests also use the selected Wi-Fi route and bounded JSON response reads.
 
 ## Core rule: Direct Play
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.12.0
+## Current implementation — 0.13.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes, custom adaptive PureCast launcher icon.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
@@ -34,7 +34,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - Gallery search by filename and photo/video filters.
 - Progressive technical metadata inspection in small batches, with cancellation when a new selection replaces the previous one.
 - Technical metadata inspection for image size and video resolution, frame rate, video/audio MIME codecs, bitrate, duration and available HDR transfer metadata.
-- Unit tests for HTTP range handling, bounded network response reads, UPnP time values, DLNA MIME profiles and sender/receiver brand classification.
+- Unit tests for HTTP range handling, bounded network response reads, invite-code rate limiting and expiry, UPnP time values, DLNA MIME profiles and sender/receiver brand classification.
 - GitHub Actions CI builds and verifies debug, R8-optimized and unminified release variants internally.
 - CI checks that DLNA commands, local media routes and shared-queue API endpoints survive release packaging.
 - CI publishes exactly one installable artifact: `PureCast-Android`, containing a single standalone `PureCast.apk`.
