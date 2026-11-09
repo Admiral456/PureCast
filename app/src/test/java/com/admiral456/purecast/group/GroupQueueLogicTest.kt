@@ -39,6 +39,24 @@ class GroupQueueLogicTest {
     }
 
     @Test
+    fun removingParticipantRemovesOnlyTheirEntriesAndClearsTheirCurrentPlayback() {
+        val mixedEntries = listOf(
+            entry("one", sender = "phone-a"),
+            entry("two", sender = "phone-b"),
+            entry("three", sender = "phone-a")
+        )
+        val removed = GroupQueueLogic.entriesFromParticipant(mixedEntries, "phone-a")
+
+        assertEquals(listOf("one", "three"), removed.map { it.id })
+        assertEquals(
+            listOf("two"),
+            mixedEntries.filterNot { it in removed }
+        )
+        assertEquals(null, GroupQueueLogic.currentEntryAfterParticipantRemoval("three", removed))
+        assertEquals("two", GroupQueueLogic.currentEntryAfterParticipantRemoval("two", removed))
+    }
+
+    @Test
     fun currentAndNavigationResolveByStableEntryId() {
         assertEquals(1, GroupQueueLogic.currentIndex(entries, "two"))
         assertEquals(-1, GroupQueueLogic.currentIndex(entries, "missing"))
@@ -47,13 +65,13 @@ class GroupQueueLogicTest {
         assertNull(GroupQueueLogic.nextEntry(entries, "three"))
     }
 
-    private fun entry(id: String) = GroupQueueEntry(
+    private fun entry(id: String, sender: String = "sender") = GroupQueueEntry(
         id = id,
         title = id,
         mimeType = "video/mp4",
         mediaUrl = "http://192.168.1.20:1234/media/abcdefgh1234",
         sizeBytes = 100L,
-        senderParticipantId = "sender",
+        senderParticipantId = sender,
         senderName = "Telefon",
         addedAtEpochMillis = 1L
     )
