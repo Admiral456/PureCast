@@ -289,7 +289,7 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
             val revokedTokens = tokens.entries
                 .filter { it.value == targetId }
                 .map { it.key }
-            revokedTokens.forEach(tokens::remove)
+            revokedTokens.forEach { revokedToken -> tokens.remove(revokedToken) }
             val removedEntries = GroupQueueLogic.entriesFromParticipant(entries, targetId)
             entries.removeAll { it.senderParticipantId == targetId }
             currentEntryId = GroupQueueLogic.currentEntryAfterParticipantRemoval(
@@ -311,21 +311,24 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
             respond(socket, 400, error("Položka nemá platný název, MIME typ nebo odkaz do místní sítě."))
             return
         }
-        val sender = synchronized(lock) { participants[participantId] }
-        if (sender == null) {
-            respond(socket, 401, error("Účastník už není součástí skupiny."))
-            return
-        }
-        val entry = GroupQueueEntry(
-            UUID.randomUUID().toString(), title, mime, url, size,
-            participantId, sender.displayName, System.currentTimeMillis()
-        )
         synchronized(lock) {
+            // Re-check membership while holding the same lock used for queue insertion.
+            // This prevents an in-flight request from re-adding items after the host removes its sender.
+            val sender = participants[participantId]
+            if (sender == null) {
+                respond(socket, 401, error("Účastník už není součástí skupiny."))
+                return
+            }
             if (entries.size >= MAX_ENTRIES) {
                 respond(socket, 409, error("Sdílená fronta může obsahovat nejvýše $MAX_ENTRIES položek."))
                 return
             }
-            entries.add(entry)
+            entries.add(
+                GroupQueueEntry(
+                    UUID.randomUUID().toString(), title, mime, url, size,
+                    participantId, sender.displayName, System.currentTimeMillis()
+                )
+            )
             revision++
         }
         respond(socket, 200, snapshotJson(snapshot()))
