@@ -747,14 +747,18 @@ private fun PureCastScreen() {
         }
     }
 
-    fun runPlaybackAction(label: String, action: suspend (DlnaDevice) -> Unit) {
+    fun runPlaybackAction(
+        label: String,
+        successMessage: String = label,
+        action: suspend (DlnaDevice) -> Unit
+    ) {
         val device = playingDevice ?: return
         scope.launch {
             busyLabel = label
             isError = false
             try {
                 action(device)
-                status = label
+                status = successMessage
             } catch (error: Exception) {
                 isError = true
                 status = error.message ?: "Příkaz se nepodařil."
@@ -1592,11 +1596,14 @@ private fun PureCastScreen() {
                         }
                         OutlinedButton(
                             onClick = {
-                                runPlaybackAction("Stahuji stav z televize…") {
+                                runPlaybackAction(
+                                    "Aktualizuji stav televize…",
+                                    "Stav televize byl aktualizován."
+                                ) {
                                     transportInfo = controller.getTransportInfo(it)
                                     positionInfo = controller.getPositionInfo(it)
                                     seekPreviewSeconds = positionInfo?.positionSeconds?.toFloat() ?: 0f
-                                    status = "Stav televize byl aktualizován."
+                                    isSeekingPlayback = false
                                 }
                             },
                             enabled = busyLabel == null,
