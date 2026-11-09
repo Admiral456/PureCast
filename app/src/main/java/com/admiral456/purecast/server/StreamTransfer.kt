@@ -64,7 +64,7 @@ internal object StreamTransfer {
         bufferSize: Int = DEFAULT_BUFFER_SIZE
     ) {
         require(bufferSize > 0) { "bufferSize must be positive" }
-        val buffer = ByteArray(bufferSize)
+        val buffer = acquireBuffer(bufferSize)
         while (true) {
             val read = input.read(buffer, 0, buffer.size)
             when {
