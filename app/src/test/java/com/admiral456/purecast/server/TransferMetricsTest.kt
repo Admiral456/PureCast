@@ -23,6 +23,15 @@ class TransferMetricsTest {
     }
 
     @Test
+    fun firstSmallBatchUsesAStableMinimumRateInterval() {
+        val metrics = TransferMetrics(clockNanos = { 10_000_000_000L })
+
+        metrics.bytesSent(256L * 1024L)
+
+        assertEquals(256L * 1024L, metrics.snapshot().currentBytesPerSecond)
+    }
+
+    @Test
     fun rateFallsToZeroAfterTheRollingWindowExpires() {
         var now = 5_000_000_000L
         val metrics = TransferMetrics(clockNanos = { now })
