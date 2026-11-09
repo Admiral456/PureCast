@@ -102,6 +102,7 @@ import com.admiral456.purecast.playback.PlaybackControlAvailability
 import com.admiral456.purecast.playback.PureCastPlaybackService
 import com.admiral456.purecast.playback.PureCastRuntime
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -228,9 +229,22 @@ private fun PureCastScreen() {
         val device = playingDevice ?: return@LaunchedEffect
         while (true) {
             delay(3_000)
-            val latestTransport = runCatching { controller.getTransportInfo(device) }.getOrNull()
+            val latestTransport = try {
+                controller.getTransportInfo(device)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
             if (latestTransport != null) transportInfo = latestTransport
-            val latestPosition = runCatching { controller.getPositionInfo(device) }.getOrNull()
+
+            val latestPosition = try {
+                controller.getPositionInfo(device)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
             if (latestPosition != null) {
                 positionInfo = latestPosition
                 if (!isSeekingPlayback) {
