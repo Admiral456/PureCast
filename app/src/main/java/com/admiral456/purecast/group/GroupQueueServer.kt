@@ -202,6 +202,8 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
                 respond(socket, 200, snapshotJson(snapshot()))
             request.method == "POST" && request.path == "/v1/leave" ->
                 leave(socket, participantId, token)
+            request.method == "POST" && request.path == "/v1/participants/remove" ->
+                removeParticipant(socket, request, participantId)
             request.method == "POST" && request.path == "/v1/queue/add" ->
                 add(socket, request, participantId)
             request.method == "POST" && request.path == "/v1/queue/remove" ->
@@ -261,6 +263,42 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
             revision++
         }
         respond(socket, 200, JSONObject().put("left", true))
+    }
+
+    private fun removeParticipant(socket: Socket, request: Request, actorParticipantId: String) {
+        if (!isHost(actorParticipantId)) {
+            respond(socket, 403, error("Účastníky může ze skupiny odebírat pouze hostitel."))
+            return
+        }
+        val targetId = JSONObject(request.body).optString("participantId").trim()
+        if (targetId.isBlank()) {
+            respond(socket, 400, error("Není vybraný účastník k odebrání."))
+            return
+        }
+        synchronized(lock) {
+            val target = participants[targetId]
+            if (target == null) {
+                respond(socket, 404, error("Tento telefon už ve skupině není."))
+                return
+            }
+            if (target.isHost) {
+                respond(socket, 403, error("Hostitele nelze odebrat ze své vlastní skupiny."))
+                return
+            }
+            participants.remove(targetId)
+            val revokedTokens = tokens.entries
+                .filter { it.value == targetId }
+                .map { it.key }
+            revokedTokens.forEach(tokens::remove)
+            val removedEntries = GroupQueueLogic.entriesFromParticipant(entries, targetId)
+            entries.removeAll { it.senderParticipantId == targetId }
+            currentEntryId = GroupQueueLogic.currentEntryAfterParticipantRemoval(
+                currentEntryId,
+                removedEntries
+            )
+            revision++
+        }
+        respond(socket, 200, snapshotJson(snapshot()))
     }
 
     private fun add(socket: Socket, request: Request, participantId: String) {
