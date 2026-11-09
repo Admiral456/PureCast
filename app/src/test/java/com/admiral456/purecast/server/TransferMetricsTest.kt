@@ -38,6 +38,22 @@ class TransferMetricsTest {
     }
 
     @Test
+    fun rollingRateDropsOldSamplesButKeepsLifetimeTotal() {
+        var now = 10_000_000_000L
+        val metrics = TransferMetrics(clockNanos = { now })
+
+        metrics.bytesSent(10_000_000L)
+        now += 4_000_000_000L
+        metrics.bytesSent(1_000_000L)
+        now += 2_000_000_000L
+
+        val snapshot = metrics.snapshot()
+
+        assertEquals(11_000_000L, snapshot.totalBytesSent)
+        assertEquals(500_000L, snapshot.currentBytesPerSecond)
+    }
+
+    @Test
     fun tracksPeakConcurrentTransfersAndCompletionCounts() {
         val metrics = TransferMetrics()
 
