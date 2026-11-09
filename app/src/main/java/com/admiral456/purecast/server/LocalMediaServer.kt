@@ -49,7 +49,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
     private val mediaByToken = ConcurrentHashMap<String, PublishedMedia>()
     private val transferMetrics = TransferMetrics()
 
-    fun transferStats(): TransferMetricsSnapshot = transferMetrics.snapshot()
+    internal fun transferStats(): TransferMetricsSnapshot = transferMetrics.snapshot()
     private val clientSockets = ConcurrentHashMap.newKeySet<Socket>()
     private val clientExecutor: ExecutorService = ThreadPoolExecutor(
         CLIENT_THREADS,
