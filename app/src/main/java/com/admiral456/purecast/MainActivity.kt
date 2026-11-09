@@ -211,7 +211,8 @@ private fun PureCastScreen() {
         onDispose { groupServer?.close() }
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(playingTitle) {
+        if (playingTitle == null) return@LaunchedEffect
         val mediaServer = PureCastRuntime.getMediaServer(appContext)
         while (true) {
             transferStats = mediaServer.transferStats()
