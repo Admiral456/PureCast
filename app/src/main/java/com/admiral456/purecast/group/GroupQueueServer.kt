@@ -4,9 +4,7 @@ import android.content.Context
 import com.admiral456.purecast.network.WifiNetworkResolver
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
 import java.io.Closeable
-import java.io.IOException
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -123,14 +121,12 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
         val remote: String
     )
 
-    private class TooLarge : IOException()
-
     private fun handleClient(socket: Socket) {
         socket.use { client ->
             client.soTimeout = 8_000
             val request = try {
                 readRequest(client)
-            } catch (_: TooLarge) {
+            } catch (_: GroupQueueRequestParser.TooLarge) {
                 respond(client, 413, error("Požadavek je příliš velký."))
                 return
             } catch (_: Exception) {
@@ -146,43 +142,13 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
     }
 
     private fun readRequest(socket: Socket): Request? {
-        val input = socket.getInputStream()
-        val bytes = ByteArrayOutputStream()
-        val end = byteArrayOf(13, 10, 13, 10)
-        var matched = 0
-        while (bytes.size() < MAX_HEADER_BYTES) {
-            val value = input.read()
-            if (value < 0) return null
-            bytes.write(value)
-            matched = when {
-                value == end[matched].toInt() -> matched + 1
-                value == 13 -> 1
-                else -> 0
-            }
-            if (matched == 4) break
-        }
-        if (matched != 4) throw TooLarge()
-
-        val lines = String(bytes.toByteArray(), Charsets.ISO_8859_1).split("\r\n")
-        val parts = lines.firstOrNull()?.split(' ') ?: throw IOException("Missing request line")
-        val method = parts.getOrNull(0)?.uppercase().orEmpty()
-        val path = parts.getOrNull(1)?.substringBefore('?').orEmpty()
-        if (method !in setOf("GET", "POST") || path.isBlank()) throw IOException("Bad request")
-        val headers = linkedMapOf<String, String>()
-        lines.drop(1).forEach { line ->
-            val colon = line.indexOf(':')
-            if (colon > 0) headers[line.substring(0, colon).trim().lowercase()] = line.substring(colon + 1).trim()
-        }
-        val length = headers["content-length"]?.toIntOrNull() ?: 0
-        if (length !in 0..MAX_BODY_BYTES) throw TooLarge()
-        val body = ByteArray(length)
-        var offset = 0
-        while (offset < length) {
-            val count = input.read(body, offset, length - offset)
-            if (count < 0) throw IOException("Incomplete body")
-            offset += count
-        }
-        return Request(method, path, headers, String(body, Charsets.UTF_8), socket.inetAddress.hostAddress ?: "unknown")
+        val parsed = GroupQueueRequestParser.read(
+            input = socket.getInputStream(),
+            remote = socket.inetAddress.hostAddress ?: "unknown",
+            maxHeaderBytes = MAX_HEADER_BYTES,
+            maxBodyBytes = MAX_BODY_BYTES
+        ) ?: return null
+        return Request(parsed.method, parsed.path, parsed.headers, parsed.body, parsed.remote)
     }
 
     private fun route(socket: Socket, request: Request) {
