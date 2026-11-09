@@ -861,7 +861,8 @@ private fun PureCastScreen() {
             title = { Text("Odebrat telefon ze skupiny?") },
             text = {
                 Text(
-                    "Telefon ${participant.displayName} ztratí přístup ke sdílené frontě a všechny jeho položky budou odstraněny. " +
+                    "Přístupový token ke sdílené frontě bude zrušen a všechny jeho položky budou odstraněny. " +
+                        "Dříve vydané přímé odkazy na soubory ale mohou zůstat platné až šest hodin. " +
                         "Pokud se právě přehrává jeho soubor, PureCast se pokusí přehrávání zastavit."
                 )
             },
