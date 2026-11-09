@@ -37,7 +37,7 @@ class PlaybackControlAvailabilityTest {
 
     @Test
     fun transitioningStateDoesNotOfferPauseOrResume() {
-        assertTrue(PlaybackControlAvailability.canPause("TRANSITIONING"))
+        assertFalse(PlaybackControlAvailability.canPause("TRANSITIONING"))
         assertFalse(PlaybackControlAvailability.canResume("TRANSITIONING"))
     }
 }
