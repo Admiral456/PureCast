@@ -1922,8 +1922,6 @@ private fun PureCastScreen() {
                     }
                 }
             }
-        }
-
         } else {
             item {
                 SectionTitle("Přehrávání", "Tady najdeš stav přenosu a ovládání vybraného média.")
