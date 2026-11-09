@@ -19,8 +19,9 @@ import java.util.concurrent.Semaphore
  */
 object MediaThumbnailLoader {
     // Only a few previews are retained; original media files are never cached or modified.
-    private val cache = LruCache<String, Bitmap>(MediaThumbnailPolicy.MAX_CACHE_BYTES) {
-        if (it.isRecycled) 0 else it.allocationByteCount.coerceAtLeast(it.byteCount)
+    private val cache = object : LruCache<String, Bitmap>(MediaThumbnailPolicy.MAX_CACHE_BYTES) {
+        override fun sizeOf(key: String, value: Bitmap): Int =
+            if (value.isRecycled) 0 else value.allocationByteCount.coerceAtLeast(value.byteCount)
     }
 
     // Limit simultaneous native image-provider/decoder work while scrolling a large gallery.
