@@ -49,6 +49,7 @@
 - [x] Handle zero and short reads from provider-backed media streams; test exact-length copies, unknown-length copies, offset skipping and premature source termination.
 - [x] Reuse bounded 256 KiB per-worker transfer buffers, use a 64 KiB response buffer and request a larger TCP send window for high-bitrate streaming.
 - [x] Stress-test synthetic 64 MiB transfers and four concurrent 16 MiB streams without allocating whole media files in memory.
+- [x] Show live rolling application-output throughput, bytes sent, active/peak transfers and completed/interrupted media streams in the playback panel; include source-video bitrate when available.
 
 ## Milestone 1 — Samsung and LG real-device interoperability
 
