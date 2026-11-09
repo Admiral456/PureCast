@@ -71,7 +71,7 @@ internal class TransferMetrics(
                 var bytes = 0L
                 for (sample in recentSamples) bytes += sample.bytes
                 val elapsed = (now - recentSamples.first().timestampNanos)
-                    .coerceAtLeast(1L)
+                    .coerceAtLeast(MIN_RATE_INTERVAL_NANOS)
                     .coerceAtMost(windowNanos)
                 (bytes.toDouble() * NANOS_PER_SECOND.toDouble() / elapsed.toDouble()).toLong().coerceAtLeast(0L)
             }
@@ -96,6 +96,7 @@ internal class TransferMetrics(
 
     companion object {
         private const val NANOS_PER_SECOND = 1_000_000_000L
+        private const val MIN_RATE_INTERVAL_NANOS = 1_000_000_000L
         private const val DEFAULT_WINDOW_NANOS = 5_000_000_000L
     }
 }
