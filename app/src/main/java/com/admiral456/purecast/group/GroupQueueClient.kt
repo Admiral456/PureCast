@@ -33,6 +33,21 @@ object GroupQueueClient {
         request(credentials.baseUrl, credentials.accessToken, "POST", "/v1/leave", JSONObject(), context)
     }
 
+    fun removeParticipant(
+        credentials: GroupQueueCredentials,
+        participantId: String,
+        context: Context? = null
+    ): GroupQueueSnapshot = parseSnapshot(
+        request(
+            credentials.baseUrl,
+            credentials.accessToken,
+            "POST",
+            "/v1/participants/remove",
+            JSONObject().put("participantId", participantId),
+            context
+        )
+    )
+
     fun add(
         credentials: GroupQueueCredentials,
         title: String,
