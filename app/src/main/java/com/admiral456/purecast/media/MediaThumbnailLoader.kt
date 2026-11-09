@@ -27,6 +27,11 @@ object MediaThumbnailLoader {
     // Limit simultaneous native image-provider/decoder work while scrolling a large gallery.
     private val decodeSlots = Semaphore(2, true)
 
+    /** Release cached previews when Android reports memory pressure. */
+    fun clearCache() {
+        cache.evictAll()
+    }
+
     fun load(
         context: Context,
         media: MediaFile,
@@ -164,6 +169,10 @@ data class MediaThumbnailSize(val width: Int, val height: Int)
 
 object MediaThumbnailPolicy {
     const val MAX_CACHE_BYTES = 8 * 1024 * 1024
+    const val TRIM_MEMORY_RUNNING_LOW_THRESHOLD = 10
+
+    fun shouldClearCacheOnTrim(level: Int): Boolean =
+        level >= TRIM_MEMORY_RUNNING_LOW_THRESHOLD
 
     fun boundedSize(
         width: Int,

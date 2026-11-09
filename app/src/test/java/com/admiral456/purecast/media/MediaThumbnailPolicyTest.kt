@@ -40,4 +40,12 @@ class MediaThumbnailPolicyTest {
     fun thumbnailCacheHasAFixedSmallMemoryBudget() {
         assertEquals(8 * 1024 * 1024, MediaThumbnailPolicy.MAX_CACHE_BYTES)
     }
+
+    @Test
+    fun cacheIsClearedWhenAndroidReportsRunningLowMemory() {
+        assertEquals(false, MediaThumbnailPolicy.shouldClearCacheOnTrim(0))
+        assertEquals(false, MediaThumbnailPolicy.shouldClearCacheOnTrim(9))
+        assertEquals(true, MediaThumbnailPolicy.shouldClearCacheOnTrim(10))
+        assertEquals(true, MediaThumbnailPolicy.shouldClearCacheOnTrim(20))
+    }
 }

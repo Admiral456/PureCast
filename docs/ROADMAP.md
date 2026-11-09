@@ -1,5 +1,12 @@
 # PureCast roadmap
 
+## 0.31.0 — Release thumbnail cache under memory pressure (in progress)
+- Clear cached preview bitmaps when Android reports low or critical memory conditions.
+- Clear the same cache on the activity low-memory callback.
+- Keep normal navigation cache reuse, with a fixed 8 MiB upper bound between memory-pressure events.
+- Add unit coverage for the memory-trim threshold.
+
+
 ## 0.30.0 — Bounded thumbnail cache (in progress)
 - Add an 8 MiB LRU cache for display-only gallery thumbnails to avoid decoding the same images again when navigating between tabs.
 - Keep the cache strictly bounded by decoded bitmap allocation size; source media bytes and TV streaming remain uncached and unchanged.
