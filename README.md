@@ -14,7 +14,7 @@ PureCast is an Android application for sending original photos and videos from p
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.16.0
+## Current implementation — 0.17.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes, custom adaptive PureCast launcher icon.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
@@ -54,6 +54,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - The shared session is in memory only. Closing the host app or stopping its process ends the group; reconnecting after a process restart is not supported yet.
 - The LAN control API uses HTTP without TLS. Pair only with people you trust on a private network; do not use the feature on public or untrusted Wi-Fi.
 - Shared playback is currently controlled by the host through DLNA. TV-browser playback is not remotely controlled by the shared queue.
+- The host can remove a participant at any time; the participant's access token is revoked and their queued items are removed. If their item is playing, PureCast attempts to stop it on the TV.
 
 ## Receiver interoperability
 
