@@ -8,6 +8,7 @@ import com.admiral456.purecast.network.WifiNetworkResolver
 import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
 import java.io.Closeable
+import java.io.OutputStream
 import java.net.Inet4Address
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
@@ -21,6 +22,24 @@ import java.util.concurrent.ThreadFactory
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 
+private class TransferCountingOutputStream(
+    private val delegate: OutputStream,
+    private val onBytesWritten: (Long) -> Unit
+) : OutputStream() {
+    override fun write(value: Int) {
+        delegate.write(value)
+        onBytesWritten(1L)
+    }
+
+    override fun write(buffer: ByteArray, offset: Int, length: Int) {
+        if (length <= 0) return
+        delegate.write(buffer, offset, length)
+        onBytesWritten(length.toLong())
+    }
+
+    override fun flush() = delegate.flush()
+}
+
 private data class PublishedMedia(
     val media: MediaFile,
     val expiresAtMillis: Long
@@ -28,6 +47,9 @@ private data class PublishedMedia(
 
 class LocalMediaServer(private val context: Context) : Closeable {
     private val mediaByToken = ConcurrentHashMap<String, PublishedMedia>()
+    private val transferMetrics = TransferMetrics()
+
+    fun transferStats(): TransferMetricsSnapshot = transferMetrics.snapshot()
     private val clientSockets = ConcurrentHashMap.newKeySet<Socket>()
     private val clientExecutor: ExecutorService = ThreadPoolExecutor(
         CLIENT_THREADS,
@@ -252,15 +274,25 @@ class LocalMediaServer(private val context: Context) : Closeable {
                 output.flush()
 
                 if (method == "HEAD") return
-                descriptor.createInputStream().use { stream ->
-                    StreamTransfer.skipFully(stream, start)
-                    if (contentLength >= 0L) {
-                        StreamTransfer.copyExactly(stream, output, contentLength, BUFFER_SIZE)
-                    } else {
-                        StreamTransfer.copyToEnd(stream, output, BUFFER_SIZE)
+                transferMetrics.transferStarted()
+                var transferCompleted = false
+                try {
+                    descriptor.createInputStream().use { stream ->
+                        val mediaOutput = TransferCountingOutputStream(output) { bytes ->
+                            transferMetrics.bytesSent(bytes)
+                        }
+                        StreamTransfer.skipFully(stream, start)
+                        if (contentLength >= 0L) {
+                            StreamTransfer.copyExactly(stream, mediaOutput, contentLength, BUFFER_SIZE)
+                        } else {
+                            StreamTransfer.copyToEnd(stream, mediaOutput, BUFFER_SIZE)
+                        }
                     }
+                    output.flush()
+                    transferCompleted = true
+                } finally {
+                    transferMetrics.transferFinished(completed = transferCompleted)
                 }
-                output.flush()
             }
         }
     }
