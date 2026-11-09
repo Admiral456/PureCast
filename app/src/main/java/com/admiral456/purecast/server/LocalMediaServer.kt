@@ -227,7 +227,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
                 val start = range?.start ?: 0L
                 val contentLength = range?.length ?: totalLength
                 val status = if (range != null) "206 Partial Content" else "200 OK"
-                val output = BufferedOutputStream(client.getOutputStream())
+                val output = BufferedOutputStream(client.getOutputStream(), OUTPUT_BUFFER_SIZE)
                 val response = StringBuilder()
                     .append("HTTP/1.1 ").append(status).append("\r\n")
                     .append("Content-Type: ").append(safeContentType(published.media.mimeType)).append("\r\n")
@@ -376,7 +376,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
             </body>
             </html>
         """.trimIndent().toByteArray(Charsets.UTF_8)
-        val output = BufferedOutputStream(socket.getOutputStream())
+        val output = BufferedOutputStream(socket.getOutputStream(), OUTPUT_BUFFER_SIZE)
         output.write(
             ("HTTP/1.1 200 OK\r\n" +
                 "Content-Type: text/html; charset=utf-8\r\n" +
@@ -390,7 +390,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
     }
 
     private fun writeSimpleResponse(socket: Socket, status: Int, reason: String) {
-        val output = BufferedOutputStream(socket.getOutputStream())
+        val output = BufferedOutputStream(socket.getOutputStream(), OUTPUT_BUFFER_SIZE)
         val response = "HTTP/1.1 $status $reason" +
             "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
         output.write(response.toByteArray(Charsets.US_ASCII))
