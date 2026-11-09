@@ -1,5 +1,12 @@
 # PureCast roadmap
 
+## 0.30.0 — Bounded thumbnail cache (in progress)
+- Add an 8 MiB LRU cache for display-only gallery thumbnails to avoid decoding the same images again when navigating between tabs.
+- Keep the cache strictly bounded by decoded bitmap allocation size; source media bytes and TV streaming remain uncached and unchanged.
+- Preserve the conservative video-preview path: use provider thumbnails only, otherwise show a placeholder rather than invoking a video codec.
+- Test and document the cache memory budget.
+
+
 ## 0.28.0 — Unified gallery and safer scrolling (in progress)
 - Replace the nested gallery LazyColumn with one continuous screen-level list.
 - Present picked photos and videos in a responsive-feeling two-column tile layout.

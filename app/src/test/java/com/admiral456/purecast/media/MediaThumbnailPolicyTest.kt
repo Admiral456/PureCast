@@ -35,4 +35,9 @@ class MediaThumbnailPolicyTest {
             MediaThumbnailPolicy.boundedSize(100, 100, maximumEdge = 0)
         )
     }
+
+    @Test
+    fun thumbnailCacheHasAFixedSmallMemoryBudget() {
+        assertEquals(8 * 1024 * 1024, MediaThumbnailPolicy.MAX_CACHE_BYTES)
+    }
 }

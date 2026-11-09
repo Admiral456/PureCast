@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.os.Build
 import android.util.Size
+import android.util.LruCache
 import kotlin.math.roundToInt
 import java.util.concurrent.Semaphore
 
@@ -17,6 +18,11 @@ import java.util.concurrent.Semaphore
  * If Android's media provider cannot supply a thumbnail, the UI displays a video placeholder.
  */
 object MediaThumbnailLoader {
+    // Only a few previews are retained; original media files are never cached or modified.
+    private val cache = LruCache<String, Bitmap>(MediaThumbnailPolicy.MAX_CACHE_BYTES) {
+        if (it.isRecycled) 0 else it.allocationByteCount.coerceAtLeast(it.byteCount)
+    }
+
     // Limit simultaneous native image-provider/decoder work while scrolling a large gallery.
     private val decodeSlots = Semaphore(2, true)
 
@@ -27,11 +33,21 @@ object MediaThumbnailLoader {
         targetHeight: Int = 240
     ): Bitmap? {
         val request = MediaThumbnailPolicy.boundedSize(targetWidth, targetHeight)
+        val cacheKey = "${media.uri}#${request.width}x${request.height}"
+        cache.get(cacheKey)?.let { cached ->
+            if (!cached.isRecycled) return cached
+        }
+
         // If both decode slots are busy, keep the lightweight placeholder instead of queuing
         // dozens of native decoders that may outlive a fast scroll.
         if (!decodeSlots.tryAcquire()) return null
         return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // A prior composition may have filled the cache while this request waited for a slot.
+            cache.get(cacheKey)?.let { cached ->
+                if (!cached.isRecycled) return cached
+            }
+
+            val thumbnail = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val providerThumbnail = try {
                     context.contentResolver.loadThumbnail(
                         media.uri,
@@ -43,16 +59,16 @@ object MediaThumbnailLoader {
                 } catch (_: Exception) {
                     null
                 }
-                if (providerThumbnail != null) {
-                    return providerThumbnail.fitInside(request.width, request.height)
-                }
+                providerThumbnail?.fitInside(request.width, request.height)
+                    ?: loadImageFallback(context, media, request.width, request.height)
+            } else {
+                loadImageFallback(context, media, request.width, request.height)
             }
 
-            // Do not invoke a video decoder just to decorate the selection list.
-            if (media.isVideo) return null
-            if (!media.isImage) return null
-
-            loadImage(context, media, request.width, request.height)
+            if (thumbnail != null && !thumbnail.isRecycled) {
+                cache.put(cacheKey, thumbnail)
+            }
+            thumbnail
         } catch (_: OutOfMemoryError) {
             null
         } catch (_: Exception) {
@@ -62,12 +78,14 @@ object MediaThumbnailLoader {
         }
     }
 
-    private fun loadImage(
+    private fun loadImageFallback(
         context: Context,
         media: MediaFile,
         targetWidth: Int,
         targetHeight: Int
     ): Bitmap? {
+        // Do not invoke a video decoder just to decorate the selection list.
+        if (media.isVideo || !media.isImage) return null
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val modernThumbnail = try {
                 val source = ImageDecoder.createSource(context.contentResolver, media.uri)
@@ -144,6 +162,8 @@ object MediaThumbnailLoader {
 data class MediaThumbnailSize(val width: Int, val height: Int)
 
 object MediaThumbnailPolicy {
+    const val MAX_CACHE_BYTES = 8 * 1024 * 1024
+
     fun boundedSize(
         width: Int,
         height: Int,
