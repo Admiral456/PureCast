@@ -15,7 +15,8 @@
 - [x] SSDP discovery for UPnP MediaRenderer devices.
 - [x] Prefer active Wi-Fi route for SSDP requests and TV-description retrieval.
 - [x] Prefer an active Wi-Fi IPv4 address when creating TV playback links.
-- [x] Resolve a reachable local IPv4 address from Android SoftAP/hotspot and supported Ethernet/tethering interfaces when no regular Wi-Fi Network is exposed.
+- [x] Resolve a reachable local IPv4 address from Android SoftAP/hotspot and supported Ethernet/tethering interfaces when no regular Wi-Fi Network is exposed; prefer the hotspot address when both SoftAP and upstream Wi-Fi are active.
+- [x] Select Wi-Fi/Ethernet Android Network routes by the destination TV/peer address for DLNA SOAP, SSDP descriptions and shared-queue clients.
 - [x] Secure device-description XML parsing and optional URLBase resolution.
 - [x] AVTransport SetAVTransportURI, Play, Pause, Stop, Seek and state/position queries.
 - [x] Automatically refresh DLNA playback state and timeline, with state-aware pause/resume/stop controls.
@@ -57,6 +58,7 @@
 
 - [ ] Test discovery and playback on Samsung Tizen Smart TVs from more than one model year.
 - [ ] Test TV discovery and Direct Play while the sender phone provides its own mobile-data-backed hotspot on Samsung, Xiaomi and Redmi devices.
+- [ ] Test simultaneous upstream Wi-Fi plus active SoftAP, including correct route selection for the TV and shared-queue peers.
 - [ ] Test discovery and playback on LG 55UJ7507.
 - [ ] Capture real SSDP replies and UPnP service descriptions from Samsung and LG firmware.
 - [ ] Verify Samsung and LG browser fallback with JPEG and H.264/AAC MP4.

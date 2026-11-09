@@ -144,8 +144,15 @@ class DlnaController(private val context: Context? = null) {
             "$body</u:$action></s:Body></s:Envelope>"
 
         val targetUrl = URL(controlUrl)
-        val wifiNetwork = context?.let(WifiNetworkResolver::activeWifiNetwork)
-        val connection = (wifiNetwork?.openConnection(targetUrl)
+        val destination = try {
+            java.net.InetAddress.getByName(targetUrl.host)
+        } catch (_: Exception) {
+            null
+        }
+        val targetNetwork = destination?.let { address ->
+            context?.let { WifiNetworkResolver.networkForAddress(it, address) }
+        }
+        val connection = (targetNetwork?.openConnection(targetUrl)
             ?: targetUrl.openConnection()) as HttpURLConnection
         try {
             connection.connectTimeout = 6_000

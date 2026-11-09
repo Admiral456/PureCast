@@ -25,8 +25,9 @@ class DlnaDiscovery(context: Context) {
     }
 
     private fun discoverBlocking(timeoutMs: Long): List<DlnaDevice> {
-        val wifiNetwork = WifiNetworkResolver.activeWifiNetwork(appContext)
         val localIpv4 = WifiNetworkResolver.localLanIpv4(appContext)
+        val wifiNetwork = localIpv4?.let { WifiNetworkResolver.networkForAddress(appContext, it) }
+            ?: WifiNetworkResolver.activeWifiNetwork(appContext)
         if (wifiNetwork == null && localIpv4 == null) {
             throw IllegalStateException(
                 "Pro místní připojení není dostupná Wi-Fi ani hotspot. Zapni hotspot telefonu a připoj k němu televizi, nebo připoj obě zařízení ke stejné Wi-Fi síti. Samotná mobilní data pro přímé DLNA spojení nestačí."
@@ -104,7 +105,15 @@ class DlnaDiscovery(context: Context) {
         } finally {
             if (multicastLock.isHeld) multicastLock.release()
         }
-        return locations.mapNotNull { location -> loadRendererDescription(location, wifiNetwork) }.distinctBy { it.id }
+        return locations.mapNotNull { location ->
+            val targetNetwork = try {
+                val address = java.net.URI(location).host?.let(java.net.InetAddress::getByName)
+                address?.let { WifiNetworkResolver.networkForAddress(appContext, it) }
+            } catch (_: Exception) {
+                null
+            }
+            loadRendererDescription(location, targetNetwork)
+        }.distinctBy { it.id }
     }
 
     private fun loadRendererDescription(location: String, network: Network?): DlnaDevice? {

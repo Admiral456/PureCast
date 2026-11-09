@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import java.net.Inet4Address
+import java.net.InetAddress
 import java.net.NetworkInterface
 
 object WifiNetworkResolver {
@@ -56,13 +57,64 @@ object WifiNetworkResolver {
      * Cellular, VPN and loopback interfaces are deliberately never selected.
      */
     fun localLanIpv4(context: Context): Inet4Address? {
+        val candidates = localInterfaceIpv4Candidates()
+        // Prefer the SoftAP address when the phone is simultaneously connected
+        // upstream as a Wi-Fi client and serving its own hotspot.
+        candidates.firstOrNull { it.first == 0 }?.second?.let { return it }
         activeWifiIpv4(context)?.let { return it }
+        return candidates.minByOrNull { it.first }?.second
+    }
 
+    /**
+     * Selects the Android Network whose connected route actually contains
+     * [address]. This avoids forcing local TV/group traffic over a different
+     * Wi-Fi connection when the phone has both an upstream Wi-Fi and a hotspot.
+     *
+     * Only Wi-Fi and Ethernet routes are eligible. Cellular/VPN default routes
+     * are not a substitute for a shared local network.
+     */
+    fun networkForAddress(context: Context, address: InetAddress): Network? {
+        val connectivity = context.applicationContext
+            .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return null
+        val active = connectivity.activeNetwork
+        val matches = mutableListOf<NetworkRouteMatch>()
+        val networks = connectivity.allNetworks
+
+        networks.forEachIndexed { index, network ->
+            val capabilities = connectivity.getNetworkCapabilities(network) ?: return@forEachIndexed
+            val isWifi = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+            val isEthernet = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+            if (!isWifi && !isEthernet) return@forEachIndexed
+
+            val properties = connectivity.getLinkProperties(network) ?: return@forEachIndexed
+            val prefixLength = properties.routes.asSequence()
+                .filter { route ->
+                    route.destination.address is Inet4Address &&
+                        route.destination.prefixLength in 1..32 &&
+                        route.matches(address)
+                }
+                .maxOfOrNull { it.destination.prefixLength }
+                ?: return@forEachIndexed
+
+            matches += NetworkRouteMatch(
+                networkIndex = index,
+                prefixLength = prefixLength,
+                isWifi = isWifi,
+                isActive = network == active
+            )
+        }
+
+        val selectedIndex = NetworkRouteSelector.bestMatch(matches) ?: return null
+        return networks.getOrNull(selectedIndex)
+    }
+
+    private fun localInterfaceIpv4Candidates(): List<Pair<Int, Inet4Address>> {
         val interfaces = try {
             NetworkInterface.getNetworkInterfaces()
         } catch (_: Exception) {
             null
-        } ?: return null
+        } ?: return emptyList()
 
         val candidates = mutableListOf<Pair<Int, Inet4Address>>()
         while (interfaces.hasMoreElements()) {
@@ -95,6 +147,6 @@ object WifiNetworkResolver {
                 }
             }
         }
-        return candidates.minByOrNull { it.first }?.second
+        return candidates
     }
 }
