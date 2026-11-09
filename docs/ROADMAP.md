@@ -17,6 +17,7 @@
 - [x] Prefer an active Wi-Fi IPv4 address when creating TV playback links.
 - [x] Secure device-description XML parsing and optional URLBase resolution.
 - [x] AVTransport SetAVTransportURI, Play, Pause, Stop, Seek and state/position queries.
+- [x] Automatically refresh DLNA playback state and timeline, with state-aware pause/resume/stop controls.
 - [x] ConnectionManager GetProtocolInfo and conservative MIME-profile compatibility evaluation.
 - [x] Original-source local HTTP streaming with byte-range support.
 - [x] TV browser fallback page with responsive controls and browser MIME support hint.
