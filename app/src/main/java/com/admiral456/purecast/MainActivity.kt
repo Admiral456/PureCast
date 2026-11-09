@@ -98,6 +98,7 @@ import com.admiral456.purecast.group.GroupQueueLogic
 import com.admiral456.purecast.group.GroupQueueServer
 import com.admiral456.purecast.group.GroupQueueSnapshot
 import com.admiral456.purecast.playback.PlaybackQueueLogic
+import com.admiral456.purecast.playback.PlaybackControlAvailability
 import com.admiral456.purecast.playback.PureCastPlaybackService
 import com.admiral456.purecast.playback.PureCastRuntime
 import java.util.Locale
@@ -198,6 +199,7 @@ private fun PureCastScreen() {
     var transportInfo by remember { mutableStateOf<DlnaTransportInfo?>(null) }
     var positionInfo by remember { mutableStateOf<DlnaPositionInfo?>(null) }
     var seekPreviewSeconds by remember { mutableStateOf(0f) }
+    var isSeekingPlayback by remember { mutableStateOf(false) }
 
     val activeDevice = devices.firstOrNull { it.id == selectedDeviceId }
     DisposableEffect(groupServer) {
@@ -219,6 +221,22 @@ private fun PureCastScreen() {
                 sharedSyncError = error.message ?: "Spojení se sdílenou frontou bylo přerušeno."
             }
             delay(2_000)
+        }
+    }
+
+    LaunchedEffect(playingDevice) {
+        val device = playingDevice ?: return@LaunchedEffect
+        while (true) {
+            delay(3_000)
+            val latestTransport = runCatching { controller.getTransportInfo(device) }.getOrNull()
+            if (latestTransport != null) transportInfo = latestTransport
+            val latestPosition = runCatching { controller.getPositionInfo(device) }.getOrNull()
+            if (latestPosition != null) {
+                positionInfo = latestPosition
+                if (!isSeekingPlayback) {
+                    seekPreviewSeconds = latestPosition.positionSeconds?.toFloat() ?: 0f
+                }
+            }
         }
     }
 
@@ -1529,13 +1547,13 @@ private fun PureCastScreen() {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
                                 onClick = { runPlaybackAction("Přehrávání pozastaveno.") { controller.pause(it) } },
-                                enabled = busyLabel == null,
+                                enabled = busyLabel == null && PlaybackControlAvailability.canPause(transportInfo?.state),
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                             ) { Text("Pozastavit") }
                             OutlinedButton(
                                 onClick = { runPlaybackAction("Pokračuji v přehrávání.") { controller.resume(it) } },
-                                enabled = busyLabel == null,
+                                enabled = busyLabel == null && PlaybackControlAvailability.canResume(transportInfo?.state),
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                             ) { Text("Pokračovat") }
@@ -1553,7 +1571,7 @@ private fun PureCastScreen() {
                                         positionInfo = null
                                     }
                                 },
-                                enabled = busyLabel == null,
+                                enabled = busyLabel == null && PlaybackControlAvailability.canStop(transportInfo?.state),
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                             ) { Text("Zastavit") }
@@ -1569,7 +1587,12 @@ private fun PureCastScreen() {
                             },
                             enabled = busyLabel == null,
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text("Obnovit stav přehrávání") }
+                        ) { Text("Aktualizovat stav teď") }
+                        Text(
+                            "Stav televize a čas videa se obnovují automaticky přibližně každé 3 sekundy.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         transportInfo?.let {
                             StatusMessage(
                                 text = "Stav: ${it.state.replace('_', ' ')} · ${it.status}",
@@ -1587,10 +1610,14 @@ private fun PureCastScreen() {
                                 )
                                 Slider(
                                     value = seekPreviewSeconds.coerceIn(0f, maxPosition),
-                                    onValueChange = { seekPreviewSeconds = it },
+                                    onValueChange = {
+                                        seekPreviewSeconds = it
+                                        isSeekingPlayback = true
+                                    },
                                     valueRange = 0f..maxPosition,
                                     enabled = busyLabel == null,
                                     onValueChangeFinished = {
+                                        isSeekingPlayback = false
                                         val target = seekPreviewSeconds.toLong().coerceIn(0L, duration)
                                         runPlaybackAction("Posouvám video na " + formatPlaybackTime(target)) {
                                             controller.seekToSeconds(it, target)
