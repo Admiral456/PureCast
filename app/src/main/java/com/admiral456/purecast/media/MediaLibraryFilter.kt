@@ -72,6 +72,14 @@ object MediaLibraryFilter {
         albumName(it).equals(album, ignoreCase = true)
     }
 
+    fun <T> retainAvailableAlbumSelection(
+        items: List<T>,
+        selectedAlbum: String?,
+        albumName: (T) -> String?
+    ): String? = selectedAlbum?.takeIf { selected ->
+        items.any { albumName(it).equals(selected, ignoreCase = true) }
+    }
+
     fun albumNames(names: Iterable<String?>): List<String> = names
         .mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }
         .distinctBy { it.lowercase() }
