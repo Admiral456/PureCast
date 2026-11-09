@@ -2,7 +2,7 @@
 
 PureCast se instaluje jako jedna samostatná Android aplikace z jediného APK. Není potřeba žádný doplňkový APK, samostatný receiver ani instalace na televizi.
 
-PureCast používá jeden Android APK pro telefony Samsung, Xiaomi, Redmi i další kompatibilní Android zařízení. Sdílená skupina funguje v rámci jedné místní Wi-Fi sítě.
+PureCast používá jeden Android APK pro telefony Samsung, Xiaomi, Redmi i další kompatibilní Android zařízení. Sdílená skupina funguje v rámci jedné místní Wi-Fi sítě nebo hotspotu telefonu, pokud jeho nastavení dovoluje komunikaci mezi připojenými zařízeními.
 
 ## Aktuální chování
 
@@ -21,7 +21,8 @@ Originální data zůstávají v odesílajícím telefonu. PureCast je nepřevá
 
 ## Podmínky a omezení
 
-- Všechny telefony a TV musí být ve stejné důvěryhodné Wi-Fi síti. Guest Wi-Fi nebo izolace klientů může spojení zablokovat.
+- Všechny telefony a TV musí být ve stejné důvěryhodné místní Wi-Fi síti nebo ve hotspotu hostitelského telefonu. Guest Wi-Fi, izolace klientů nebo omezení tetheringu v systému telefonu mohou spojení zablokovat.
+- Samotná mobilní data LTE/5G bez společné místní sítě nestačí. Když hostitelský telefon zapne osobní hotspot a ostatní zařízení se k němu připojí, média se přenášejí místně přes hotspot, nikoli přes veřejný internet.
 - Hostitelská aplikace musí zůstat spuštěná. Když Android ukončí proces hostitele, skupina skončí.
 - Telefon, který přidal médium, musí zůstat dostupný, dokud se jeho položka přehrává. Force-stop, ukončení procesu nebo změna sítě může odkaz přerušit.
 - Odkazy na média mají platnost šest hodin. Po vypršení je potřeba položku z telefonu znovu přidat.

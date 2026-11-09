@@ -73,7 +73,7 @@
 - [x] Queue navigation stops at the first/last item and is covered by unit tests.
 - [x] Album filtering from Android MediaStore bucket metadata when available, with stale selections cleared after imports and last-item removal.
 - [x] Sort media by newest available modification date, name, largest size and smallest size.
-- [x] Shared local group queue synchronized between Android phones on the same Wi-Fi, with host-only playback/reorder/remove permissions.
+- [x] Shared local group queue synchronized between Android phones on the same local Wi-Fi or a reachable host-phone hotspot, with host-only playback/reorder/remove permissions.
 - [x] Shared queue previous/next navigation and stop-at-boundaries behavior.
 - [x] Show sender identity for items submitted to a shared queue.
 - [x] Pair participants using a short invite code and issue per-participant high-entropy access tokens.
