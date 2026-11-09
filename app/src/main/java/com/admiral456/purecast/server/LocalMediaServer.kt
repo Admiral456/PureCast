@@ -30,8 +30,8 @@ class LocalMediaServer(private val context: Context) : Closeable {
     private val mediaByToken = ConcurrentHashMap<String, PublishedMedia>()
     private val clientSockets = ConcurrentHashMap.newKeySet<Socket>()
     private val clientExecutor: ExecutorService = ThreadPoolExecutor(
-        MIN_CLIENT_THREADS,
-        MAX_CLIENT_THREADS,
+        CLIENT_THREADS,
+        CLIENT_THREADS,
         CLIENT_KEEP_ALIVE_SECONDS,
         TimeUnit.SECONDS,
         ArrayBlockingQueue(MAX_QUEUED_CLIENTS),
@@ -39,7 +39,11 @@ class LocalMediaServer(private val context: Context) : Closeable {
             Thread(task, "PureCast-HTTP-client").apply { isDaemon = true }
         },
         ThreadPoolExecutor.AbortPolicy()
-    )
+    ).apply {
+        // Grow to the full bounded worker count immediately during request bursts,
+        // then release idle workers after the keep-alive interval.
+        allowCoreThreadTimeOut(true)
+    }
     @Volatile private var serverSocket: ServerSocket? = null
     @Volatile private var acceptThread: Thread? = null
     @Volatile private var boundAddress: Inet4Address? = null
@@ -481,9 +485,8 @@ class LocalMediaServer(private val context: Context) : Closeable {
         private const val BUFFER_SIZE = StreamTransfer.DEFAULT_BUFFER_SIZE
         private const val OUTPUT_BUFFER_SIZE = 64 * 1024
         private const val SOCKET_SEND_BUFFER_SIZE = 512 * 1024
-        private const val MIN_CLIENT_THREADS = 2
-        private const val MAX_CLIENT_THREADS = 8
-        private const val MAX_QUEUED_CLIENTS = 32
+        private const val CLIENT_THREADS = 8
+        private const val MAX_QUEUED_CLIENTS = 16
         private const val CLIENT_KEEP_ALIVE_SECONDS = 30L
         private const val TOKEN_LIFETIME_MS = 6 * 60 * 60 * 1_000L
         private val MEDIA_PATH = Regex("^/(media|tv)/([A-Za-z0-9_-]{12})$")
