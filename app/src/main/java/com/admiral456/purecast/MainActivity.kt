@@ -152,7 +152,12 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = if (isSystemInDarkTheme()) PureCastDark else PureCastLight) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     PureCastScreen()
-                    override fun onLowMemory() {
+                }
+            }
+        }
+    }
+
+    override fun onLowMemory() {
         super.onLowMemory()
         MediaThumbnailLoader.clearCache()
     }
@@ -161,10 +166,6 @@ class MainActivity : ComponentActivity() {
         super.onTrimMemory(level)
         if (MediaThumbnailPolicy.shouldClearCacheOnTrim(level)) {
             MediaThumbnailLoader.clearCache()
-        }
-    }
-}
-            }
         }
     }
 }
