@@ -36,7 +36,7 @@ internal object StreamTransfer {
         require(length >= 0L) { "length must not be negative" }
         require(bufferSize > 0) { "bufferSize must be positive" }
         var remaining = length
-        val buffer = ByteArray(bufferSize)
+        val buffer = acquireBuffer(bufferSize)
         while (remaining > 0L) {
             val requested = minOf(buffer.size.toLong(), remaining).toInt()
             val read = input.read(buffer, 0, requested)
@@ -79,5 +79,15 @@ internal object StreamTransfer {
         }
     }
 
-    private const val DEFAULT_BUFFER_SIZE = 64 * 1024
+    internal const val DEFAULT_BUFFER_SIZE = 256 * 1024
+
+    // Reuse one bounded transfer buffer per worker thread. Range-heavy TV browsers
+    // can open multiple short-lived requests; this reduces allocation/GC pressure
+    // without sharing mutable memory between concurrent streams.
+    private val reusableDefaultBuffer = ThreadLocal.withInitial {
+        ByteArray(DEFAULT_BUFFER_SIZE)
+    }
+
+    private fun acquireBuffer(bufferSize: Int): ByteArray =
+        if (bufferSize == DEFAULT_BUFFER_SIZE) reusableDefaultBuffer.get() else ByteArray(bufferSize)
 }
