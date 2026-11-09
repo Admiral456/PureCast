@@ -1,5 +1,13 @@
 # PureCast roadmap
 
+## 0.28.0 — Unified gallery and safer scrolling (in progress)
+- Replace the nested gallery LazyColumn with one continuous screen-level list.
+- Present picked photos and videos in a responsive-feeling two-column tile layout.
+- Separate permission state, import actions, library filters and media tiles into clear sections.
+- Put secondary actions in a per-item overflow menu while keeping TV playback as the primary action.
+- Let Compose own the lifetime of preview bitmaps rather than manually recycling a bitmap as soon as a lazy item leaves composition.
+
+
 ## 0.27.0 — Conservative gallery previews (in progress)
 - Do not invoke MediaMetadataRetriever to generate video frames while browsing the gallery; use Android's provider thumbnail or a neutral video placeholder.
 - Serialize thumbnail generation through a single limited-parallelism dispatcher to avoid opening several native decoders at once.
