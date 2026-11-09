@@ -291,6 +291,10 @@ private fun PureCastScreen() {
                 selectedAlbum = null
             }
             selectedFiles.addAll(files)
+            if (files.isNotEmpty()) {
+                // New imports should not stay hidden behind a filter for a different album.
+                selectedAlbum = null
+            }
             mediaSearchQuery = ""
             mediaKindFilter = MediaKindFilter.ALL
             isError = importedFiles.isEmpty() || mediaFiles.isEmpty() ||
@@ -1149,6 +1153,10 @@ private fun PureCastScreen() {
                                                         TextButton(
                                                             onClick = {
                                                                 selectedFiles.remove(file)
+                                                                selectedAlbum = MediaLibraryFilter.retainAvailableAlbumSelection(
+                                                                    selectedFiles,
+                                                                    selectedAlbum
+                                                                ) { it.albumName }
                                                                 technicalInfo.remove(file.uri.toString())
                                                                 val queuedIndex = playbackQueue.indexOfFirst { it.uri == file.uri }
                                                                 if (queuedIndex >= 0) removeFromQueue(queuedIndex)
