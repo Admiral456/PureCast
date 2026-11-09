@@ -50,7 +50,7 @@ class GroupQueueLogicTest {
         assertEquals(listOf("one", "three"), removed.map { it.id })
         assertEquals(
             listOf("two"),
-            mixedEntries.filterNot { it in removed }
+            mixedEntries.filterNot { it in removed }.map { it.id }
         )
         assertEquals(null, GroupQueueLogic.currentEntryAfterParticipantRemoval("three", removed))
         assertEquals("two", GroupQueueLogic.currentEntryAfterParticipantRemoval("two", removed))
