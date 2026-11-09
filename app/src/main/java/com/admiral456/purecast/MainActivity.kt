@@ -230,7 +230,9 @@ private fun PureCastScreen() {
                     sharedCredentials = null
                     sharedSnapshot = null
                     sharedSyncError = null
-                    status = "Hostitel tě odebral ze sdílené skupiny. Pro nové připojení potřebuješ aktuální pozvánku."
+                    groupAddressInput = credentials.baseUrl
+                    groupCodeInput = ""
+                    status = "Hostitel tě odebral ze sdílené skupiny. Adresa hostitele zůstala uložená; pro nové připojení potřebuješ aktuální kód."
                     isError = true
                 }
             }
@@ -751,6 +753,7 @@ private fun PureCastScreen() {
                     GroupQueueClient.removeParticipant(credentials, participant.id, appContext)
                 }
                 sharedSnapshot = latest
+                sharedSyncError = null
                 if (wasPlaying) {
                     playingDevice?.let { device ->
                         try {
