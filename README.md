@@ -14,7 +14,7 @@ PureCast is an Android application for sending original photos and videos from p
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.19.0
+## Current implementation — 0.20.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes, custom adaptive PureCast launcher icon.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
@@ -24,7 +24,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - AVTransport play, pause, resume, stop, seek, playback-state and position queries.
 - Automatic DLNA playback-state and timeline refresh every three seconds, with pause/resume/stop controls enabled according to the TV-reported state.
 - ConnectionManager GetProtocolInfo parsing with conservative MIME-type compatibility reporting; DLNA SOAP commands use the active Wi-Fi network when available.
-- Local HTTP streaming of the original selected URI with byte-range support, Wi-Fi-interface binding, bounded client concurrency, validated MIME response headers and active-connection cleanup. Copy loops handle short or temporarily zero-length reads and verify exact range lengths without buffering entire media files.
+- Local HTTP streaming of the original selected URI with byte-range support, Wi-Fi-interface binding, bounded client concurrency (8 workers plus a bounded queue), validated MIME response headers and active-connection cleanup. Large transfers use reusable 256 KiB per-worker copy buffers, a 64 KiB response buffer and a best-effort 512 KiB TCP send-buffer hint. Copy loops handle short or temporarily zero-length reads and verify exact range lengths without buffering entire media files.
 - Strict shared-queue HTTP request parsing: validates request lines and header syntax, rejects duplicate headers, chunked or encoded bodies, requires a valid fixed Content-Length and JSON content type for POST, caps request sizes, and handles zero-length bulk reads without hanging.
 - TV browser fallback page with responsive playback UI, video MIME hints and actual image load/error feedback including decoded dimensions. The image element and its MIME feedback are checked in the packaged APK.
 - Foreground media-playback service to keep streaming active when the app is backgrounded or the display turns off.
@@ -41,7 +41,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - Album filters based on Android MediaStore bucket names when the content provider exposes them; importing new media resets a stale album filter, and removing the last item from a selected album clears that filter. Document-picker items without album metadata remain available under all albums.
 - Progressive technical metadata inspection in small batches, with cancellation when a new selection replaces the previous one.
 - Technical metadata inspection for image size and video resolution, frame rate, video/audio MIME codecs, bitrate, duration and available HDR transfer metadata.
-- Unit tests for HTTP range handling, resilient exact/unknown-length media stream copying (including zero and short reads), strict shared-queue HTTP framing and body limits, bounded network response reads, invite-code rate limiting and expiry, UPnP time values, DLNA MIME profiles and sender/receiver brand classification.
+- Unit tests for HTTP range handling, resilient exact/unknown-length media stream copying (including zero and short reads), synthetic sustained transfers of 64 MiB and four parallel 16 MiB streams, strict shared-queue HTTP framing and body limits, bounded network response reads, invite-code rate limiting and expiry, UPnP time values, DLNA MIME profiles and sender/receiver brand classification.
 - GitHub Actions CI builds and verifies debug, R8-optimized and unminified release variants internally.
 - CI checks that DLNA commands, local media routes and shared-queue API endpoints survive release packaging.
 - CI publishes exactly one installable artifact: `PureCast-Android`, containing a single standalone `PureCast.apk`.
@@ -88,6 +88,14 @@ The latest successful build is available from [GitHub Actions artifacts](https:/
 ## Why the optimized APK is small
 
 PureCast does not bundle a video transcoder, codec framework, sample photos, sample videos, downloaded media or large image assets. It serves original files from Android content URIs and asks the TV to decode them. The release APK is therefore mostly app code and a small resource table. R8 removes unused parts of the AndroidX/Compose dependency graph and remains an internal comparison build. The one user-facing APK uses the complete unminified release configuration. CI verifies critical feature markers in both release packages. A small APK is not proof of missing functionality, and adding dummy files to increase its size would not make the app more complete.
+
+## High-bitrate video and 4K/120 fps
+
+PureCast transports the original encoded file; it does not decode, re-encode or generate extra frames. A "4K/120 fps" label alone does not define the required network speed: the actual file bitrate, codec/profile, bit depth, HDR format and audio track all matter. The TV must also decode that exact format and frame rate.
+
+For demanding files, use a strong local Wi-Fi connection or wired LAN where possible, keep the phone and TV on the same non-guest network, and avoid client isolation. A Wi-Fi link-rate indicator is not a measurement of sustained application throughput. The phone must be able to read the original file and sustain a send rate above its encoded bitrate; weak signal, interference, busy storage or TV decoder limits can still cause buffering or playback failure.
+
+CI now exercises large synthetic copies and four concurrent streams, but that does not certify a real 4K/120 fps end-to-end setup. Actual validation needs a known high-bitrate sample, the target phone, router and exact TV model/firmware. PureCast deliberately reports compatibility limits rather than lowering quality through transcoding.
 
 ## Quality and compatibility notes
 
