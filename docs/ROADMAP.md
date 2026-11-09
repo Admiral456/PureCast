@@ -47,6 +47,8 @@
 - [x] Validate MIME values before using them in HTTP response headers and TV-browser attributes.
 - [x] Enforce strict unsigned-decimal syntax for HTTP byte ranges.
 - [x] Handle zero and short reads from provider-backed media streams; test exact-length copies, unknown-length copies, offset skipping and premature source termination.
+- [x] Reuse bounded 256 KiB per-worker transfer buffers, use a 64 KiB response buffer and request a larger TCP send window for high-bitrate streaming.
+- [x] Stress-test synthetic 64 MiB transfers and four concurrent 16 MiB streams without allocating whole media files in memory.
 
 ## Milestone 1 — Samsung and LG real-device interoperability
 
