@@ -241,11 +241,11 @@ class LocalMediaServer(private val context: Context) : Closeable {
 
                 if (method == "HEAD") return
                 descriptor.createInputStream().use { stream ->
-                    skipFully(stream, start)
+                    StreamTransfer.skipFully(stream, start)
                     if (contentLength >= 0L) {
-                        copyExactly(stream, output, contentLength)
+                        StreamTransfer.copyExactly(stream, output, contentLength, BUFFER_SIZE)
                     } else {
-                        stream.copyTo(output, BUFFER_SIZE)
+                        StreamTransfer.copyToEnd(stream, output, BUFFER_SIZE)
                     }
                 }
                 output.flush()
@@ -379,30 +379,6 @@ class LocalMediaServer(private val context: Context) : Closeable {
         )
         if (method != "HEAD") output.write(html)
         output.flush()
-    }
-
-    private fun skipFully(input: InputStream, bytes: Long) {
-        var remaining = bytes
-        while (remaining > 0L) {
-            val skipped = input.skip(remaining)
-            if (skipped > 0L) {
-                remaining -= skipped
-            } else {
-                if (input.read() < 0) throw IOException("Soubor skončil před požadovaným rozsahem.")
-                remaining--
-            }
-        }
-    }
-
-    private fun copyExactly(input: InputStream, output: BufferedOutputStream, length: Long) {
-        var remaining = length
-        val buffer = ByteArray(BUFFER_SIZE)
-        while (remaining > 0L) {
-            val read = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
-            if (read < 0) throw IOException("Zdrojový soubor skončil před koncem přenosu.")
-            output.write(buffer, 0, read)
-            remaining -= read
-        }
     }
 
     private fun writeSimpleResponse(socket: Socket, status: Int, reason: String) {
