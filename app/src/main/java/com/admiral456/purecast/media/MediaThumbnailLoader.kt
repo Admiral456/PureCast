@@ -7,6 +7,7 @@ import android.graphics.ImageDecoder
 import android.os.Build
 import android.util.Size
 import kotlin.math.roundToInt
+import java.util.concurrent.Semaphore
 
 /**
  * Generates small previews only. It must never prepare or alter the media file used for streaming.
@@ -16,6 +17,9 @@ import kotlin.math.roundToInt
  * If Android's media provider cannot supply a thumbnail, the UI displays a video placeholder.
  */
 object MediaThumbnailLoader {
+    // Limit simultaneous native image-provider/decoder work while scrolling a large gallery.
+    private val decodeSlots = Semaphore(2, true)
+
     fun load(
         context: Context,
         media: MediaFile,
@@ -23,6 +27,9 @@ object MediaThumbnailLoader {
         targetHeight: Int = 240
     ): Bitmap? {
         val request = MediaThumbnailPolicy.boundedSize(targetWidth, targetHeight)
+        // If both decode slots are busy, keep the lightweight placeholder instead of queuing
+        // dozens of native decoders that may outlive a fast scroll.
+        if (!decodeSlots.tryAcquire()) return null
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val providerThumbnail = try {
@@ -50,6 +57,8 @@ object MediaThumbnailLoader {
             null
         } catch (_: Exception) {
             null
+        } finally {
+            decodeSlots.release()
         }
     }
 
