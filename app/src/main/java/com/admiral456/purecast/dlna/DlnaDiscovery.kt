@@ -25,9 +25,16 @@ class DlnaDiscovery(context: Context) {
     }
 
     private fun discoverBlocking(timeoutMs: Long): List<DlnaDevice> {
+        val activeWifiNetwork = WifiNetworkResolver.activeWifiNetwork(appContext)
         val localIpv4 = WifiNetworkResolver.localLanIpv4(appContext)
-        val wifiNetwork = localIpv4?.let { WifiNetworkResolver.networkForAddress(appContext, it) }
-            ?: WifiNetworkResolver.activeWifiNetwork(appContext)
+        // If a SoftAP address was selected, do not bind to an unrelated upstream
+        // Wi-Fi network merely because it is active. Bind the socket to the AP
+        // interface instead when Android does not expose a matching Network.
+        val wifiNetwork = if (localIpv4 != null) {
+            WifiNetworkResolver.networkForAddress(appContext, localIpv4)
+        } else {
+            activeWifiNetwork
+        }
         if (wifiNetwork == null && localIpv4 == null) {
             throw IllegalStateException(
                 "Pro místní připojení není dostupná Wi-Fi ani hotspot. Zapni hotspot telefonu a připoj k němu televizi, nebo připoj obě zařízení ke stejné Wi-Fi síti. Samotná mobilní data pro přímé DLNA spojení nestačí."
