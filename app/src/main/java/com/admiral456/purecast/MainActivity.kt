@@ -94,6 +94,7 @@ import com.admiral456.purecast.permissions.GalleryAccessPolicy
 import com.admiral456.purecast.group.GroupQueueClient
 import com.admiral456.purecast.group.GroupQueueCredentials
 import com.admiral456.purecast.group.GroupQueueEntry
+import com.admiral456.purecast.group.GroupQueueParticipant
 import com.admiral456.purecast.group.GroupQueueLogic
 import com.admiral456.purecast.group.GroupQueueServer
 import com.admiral456.purecast.group.GroupQueueSnapshot
@@ -170,6 +171,7 @@ private fun PureCastScreen() {
     var groupCodeInput by remember { mutableStateOf("") }
     var sharedBusy by remember { mutableStateOf(false) }
     var sharedSyncError by remember { mutableStateOf<String?>(null) }
+    var participantPendingRemoval by remember { mutableStateOf<GroupQueueParticipant?>(null) }
     val technicalInfo = remember { mutableStateMapOf<String, MediaTechnicalInfo>() }
     var mediaInspectionJob by remember { mutableStateOf<Job?>(null) }
     var mediaSearchQuery by remember { mutableStateOf("") }
@@ -219,7 +221,18 @@ private fun PureCastScreen() {
                 if (latest != null) sharedSnapshot = latest
                 sharedSyncError = null
             } catch (error: Exception) {
-                sharedSyncError = error.message ?: "Spojení se sdílenou frontou bylo přerušeno."
+                val message = error.message ?: "Spojení se sdílenou frontou bylo přerušeno."
+                sharedSyncError = message
+                if (!credentials.isHost &&
+                    (message.contains("Přístupový token", ignoreCase = true) ||
+                        message.contains("Účastník už není", ignoreCase = true))
+                ) {
+                    sharedCredentials = null
+                    sharedSnapshot = null
+                    sharedSyncError = null
+                    status = "Hostitel tě odebral ze sdílené skupiny. Pro nové připojení potřebuješ aktuální pozvánku."
+                    isError = true
+                }
             }
             delay(2_000)
         }
@@ -725,6 +738,47 @@ private fun PureCastScreen() {
         }
     }
 
+    fun removeSharedParticipant(participant: GroupQueueParticipant) {
+        val credentials = sharedCredentials ?: return
+        if (!credentials.isHost || sharedBusy || participant.isHost) return
+        scope.launch {
+            sharedBusy = true
+            try {
+                val wasPlaying = sharedSnapshot?.entries?.firstOrNull {
+                    it.id == playingSharedEntryId
+                }?.senderParticipantId == participant.id
+                val latest = withContext(Dispatchers.IO) {
+                    GroupQueueClient.removeParticipant(credentials, participant.id, appContext)
+                }
+                sharedSnapshot = latest
+                if (wasPlaying) {
+                    playingDevice?.let { device ->
+                        try {
+                            controller.stop(device)
+                        } catch (_: Exception) {
+                            // The participant is still removed even if the TV no longer responds.
+                        }
+                    }
+                    playingDevice = null
+                    playingFile = null
+                    playingTitle = null
+                    playingSharedEntryId = null
+                    browserUrl = null
+                    transportInfo = null
+                    positionInfo = null
+                    status = "Telefon ${participant.displayName} byl odebrán. Jeho položky byly odstraněny a přehrávání zastaveno."
+                } else {
+                    status = "Telefon ${participant.displayName} byl odebrán ze skupiny. Jeho položky byly odstraněny."
+                }
+                isError = false
+            } catch (error: Exception) {
+                sharedSyncError = error.message ?: "Telefon se nepodařilo odebrat ze skupiny."
+            } finally {
+                sharedBusy = false
+            }
+        }
+    }
+
     fun playNextSharedEntry() {
         val snapshot = sharedSnapshot ?: return
         val next = GroupQueueLogic.nextEntry(
@@ -796,6 +850,33 @@ private fun PureCastScreen() {
             dismissButton = {
                 TextButton(onClick = { showGalleryAccessExplanation = false }) {
                     Text("Teď ne")
+                }
+            }
+        )
+    }
+
+    participantPendingRemoval?.let { participant ->
+        AlertDialog(
+            onDismissRequest = { participantPendingRemoval = null },
+            title = { Text("Odebrat telefon ze skupiny?") },
+            text = {
+                Text(
+                    "Telefon ${participant.displayName} ztratí přístup ke sdílené frontě a všechny jeho položky budou odstraněny. " +
+                        "Pokud se právě přehrává jeho soubor, PureCast se pokusí přehrávání zastavit."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        participantPendingRemoval = null
+                        removeSharedParticipant(participant)
+                    },
+                    enabled = !sharedBusy
+                ) { Text("Odebrat telefon") }
+            },
+            dismissButton = {
+                TextButton(onClick = { participantPendingRemoval = null }) {
+                    Text("Zrušit")
                 }
             }
         )
@@ -1424,6 +1505,33 @@ private fun PureCastScreen() {
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
                         )
+                        if (credentials.isHost) {
+                            val connectedPhones = snapshot?.participants?.filterNot { it.isHost }.orEmpty()
+                            Text("Připojené telefony", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                            if (connectedPhones.isEmpty()) {
+                                Text(
+                                    "Zatím není připojený žádný další telefon.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                connectedPhones.forEach { participant ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(participant.displayName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                            Text("Připojený účastník", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        TextButton(
+                                            onClick = { participantPendingRemoval = participant },
+                                            enabled = !sharedBusy
+                                        ) { Text("Odebrat") }
+                                    }
+                                }
+                            }
+                        }
                         if (credentials.isHost) {
                             Text("Adresa: ${credentials.baseUrl}", style = MaterialTheme.typography.bodySmall)
                             Text("Pozvánkový kód: ${credentials.inviteCode}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
