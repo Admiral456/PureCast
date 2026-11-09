@@ -94,6 +94,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
         while (!server.isClosed) {
             try {
                 val client = server.accept()
+                configureAcceptedSocket(client)
                 clientSockets.add(client)
                 try {
                     clientExecutor.execute {
@@ -119,6 +120,15 @@ class LocalMediaServer(private val context: Context) : Closeable {
                 if (!server.isClosed) continue
                 return
             }
+        }
+    }
+
+    private fun configureAcceptedSocket(socket: Socket) {
+        // Increase the kernel TCP send window for high-bitrate local video streams.
+        // The OS may clamp this value; failure is non-fatal and the default remains usable.
+        try {
+            socket.sendBufferSize = SOCKET_SEND_BUFFER_SIZE
+        } catch (_: Exception) {
         }
     }
 
@@ -204,7 +214,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
                 } else null
 
                 if (isByteRange && totalLength > 0L && range == null) {
-                    val output = BufferedOutputStream(client.getOutputStream())
+                    val output = BufferedOutputStream(client.getOutputStream(), OUTPUT_BUFFER_SIZE)
                     output.write(
                         ("HTTP/1.1 416 Range Not Satisfiable\r\n" +
                             "Content-Range: bytes */$totalLength\r\n" +
@@ -468,7 +478,9 @@ class LocalMediaServer(private val context: Context) : Closeable {
 
     companion object {
         private const val MAX_HEADER_BYTES = 16_384
-        private const val BUFFER_SIZE = 64 * 1024
+        private const val BUFFER_SIZE = StreamTransfer.DEFAULT_BUFFER_SIZE
+        private const val OUTPUT_BUFFER_SIZE = 64 * 1024
+        private const val SOCKET_SEND_BUFFER_SIZE = 512 * 1024
         private const val MIN_CLIENT_THREADS = 2
         private const val MAX_CLIENT_THREADS = 8
         private const val MAX_QUEUED_CLIENTS = 32
