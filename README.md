@@ -54,7 +54,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - The shared session is in memory only. Closing the host app or stopping its process ends the group; reconnecting after a process restart is not supported yet.
 - The LAN control API uses HTTP without TLS. Pair only with people you trust on a private network; do not use the feature on public or untrusted Wi-Fi.
 - Shared playback is currently controlled by the host through DLNA. TV-browser playback is not remotely controlled by the shared queue.
-- The host can remove a participant at any time; the participant's access token is revoked and their queued items are removed. If their item is playing, PureCast attempts to stop it on the TV.
+- The host can remove a participant at any time; the shared-queue API token is revoked and their queued items are removed. If their item is playing, PureCast attempts to stop it on the TV. Previously issued direct media URLs cannot yet be revoked remotely and may remain valid until their six-hour expiry.
 
 ## Receiver interoperability
 
