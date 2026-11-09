@@ -755,13 +755,14 @@ private fun PureCastScreen() {
                 sharedSnapshot = latest
                 sharedSyncError = null
                 if (wasPlaying) {
-                    playingDevice?.let { device ->
+                    val tvStopConfirmed = playingDevice?.let { device ->
                         try {
                             controller.stop(device)
+                            true
                         } catch (_: Exception) {
-                            // The participant is still removed even if the TV no longer responds.
+                            false
                         }
-                    }
+                    } ?: false
                     playingDevice = null
                     playingFile = null
                     playingTitle = null
@@ -769,7 +770,11 @@ private fun PureCastScreen() {
                     browserUrl = null
                     transportInfo = null
                     positionInfo = null
-                    status = "Telefon ${participant.displayName} byl odebrán. Jeho položky byly odstraněny a přehrávání zastaveno."
+                    status = if (tvStopConfirmed) {
+                        "Telefon ${participant.displayName} byl odebrán. Jeho položky byly odstraněny a TV potvrdila zastavení přehrávání."
+                    } else {
+                        "Telefon ${participant.displayName} byl odebrán a jeho položky byly odstraněny. Zastavení na TV se nepodařilo potvrdit; ověř přehrávání přímo na televizi."
+                    }
                 } else {
                     status = "Telefon ${participant.displayName} byl odebrán ze skupiny. Jeho položky byly odstraněny."
                 }
