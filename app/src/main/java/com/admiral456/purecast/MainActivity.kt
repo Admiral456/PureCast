@@ -1672,7 +1672,7 @@ private fun PureCastScreen() {
                                 Text("Živý přenos dat", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                                 Spacer(Modifier.weight(1f))
                                 StatusTag(
-                                    if (transferStats.activeTransfers > 0) "PŘENÁŠÍ SE" else "ČEKÁ",
+                                    if (transferStats.activeTransfers > 0) "PŘENÁŠÍ SE" else "BEZ AKTIVNÍHO PŘENOSU",
                                     if (transferStats.activeTransfers > 0) MaterialTheme.colorScheme.secondary
                                     else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -1685,6 +1685,15 @@ private fun PureCastScreen() {
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
+                            }
+                            playingFile?.let { file ->
+                                technicalInfo[file.uri.toString()]?.bitrateBitsPerSecond?.let { sourceBitrate ->
+                                    Text(
+                                        "Bitrate zdrojového videa: ${formatBitrate(sourceBitrate)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                             Text(
                                 "Odesláno od spuštění serveru: ${formatSize(transferStats.totalBytesSent)}",
