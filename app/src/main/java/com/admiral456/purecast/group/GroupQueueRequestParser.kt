@@ -1,5 +1,6 @@
 package com.admiral456.purecast.group
 
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -21,6 +22,13 @@ internal object GroupQueueRequestParser {
     )
 
     class TooLarge : IOException("HTTP request exceeds the configured limit")
+
+    fun read(
+        bytes: ByteArray,
+        remote: String,
+        maxHeaderBytes: Int,
+        maxBodyBytes: Int
+    ): ParsedRequest? = read(ByteArrayInputStream(bytes), remote, maxHeaderBytes, maxBodyBytes)
 
     fun read(
         input: InputStream,
