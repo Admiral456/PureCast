@@ -6,7 +6,7 @@ package com.admiral456.purecast.playback
  */
 object PlaybackControlAvailability {
     fun canPause(state: String?): Boolean =
-        state !in setOf("PAUSED_PLAYBACK", "STOPPED", "NO_MEDIA_PRESENT")
+        state !in setOf("PAUSED_PLAYBACK", "TRANSITIONING", "STOPPED", "NO_MEDIA_PRESENT")
 
     fun canResume(state: String?): Boolean =
         state !in setOf("PLAYING", "TRANSITIONING", "STOPPED", "NO_MEDIA_PRESENT")
