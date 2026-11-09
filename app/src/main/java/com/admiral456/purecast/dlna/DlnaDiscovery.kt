@@ -7,7 +7,9 @@ import android.net.Network
 import com.admiral456.purecast.network.WifiNetworkResolver
 import com.admiral456.purecast.network.readBytesLimited
 import java.net.DatagramPacket
-import java.net.DatagramSocket
+import java.net.MulticastSocket
+import java.net.InetSocketAddress
+import java.net.NetworkInterface
 import java.net.InetAddress
 import java.net.URL
 import javax.xml.parsers.DocumentBuilderFactory
@@ -23,12 +25,18 @@ class DlnaDiscovery(context: Context) {
     }
 
     private fun discoverBlocking(timeoutMs: Long): List<DlnaDevice> {
+        val wifiNetwork = WifiNetworkResolver.activeWifiNetwork(appContext)
+        val localIpv4 = WifiNetworkResolver.localLanIpv4(appContext)
+        if (wifiNetwork == null && localIpv4 == null) {
+            throw IllegalStateException(
+                "Pro místní připojení není dostupná Wi-Fi ani hotspot. Zapni hotspot telefonu a připoj k němu televizi, nebo připoj obě zařízení ke stejné Wi-Fi síti. Samotná mobilní data pro přímé DLNA spojení nestačí."
+            )
+        }
         val wifi = appContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         val multicastLock = wifi.createMulticastLock("PureCast-SSDP").apply {
             setReferenceCounted(false)
             acquire()
         }
-        val wifiNetwork = WifiNetworkResolver.activeWifiNetwork(appContext)
         val locations = linkedSetOf<String>()
         val searchTargets = listOf(
             "urn:schemas-upnp-org:device:MediaRenderer:1",
@@ -37,13 +45,25 @@ class DlnaDiscovery(context: Context) {
         )
 
         try {
-            DatagramSocket().use { socket ->
-                wifiNetwork?.let { network ->
+            MulticastSocket(null).use { socket ->
+                if (wifiNetwork != null) {
                     try {
-                        network.bindSocket(socket)
+                        wifiNetwork.bindSocket(socket)
                     } catch (error: Exception) {
                         throw IllegalStateException(
                             "Vyhledávání televizorů se nepodařilo navázat na Wi-Fi síť.",
+                            error
+                        )
+                    }
+                } else {
+                    val localAddress = localIpv4
+                        ?: throw IllegalStateException("Není dostupná místní IPv4 adresa pro vyhledání televizoru.")
+                    try {
+                        socket.bind(InetSocketAddress(localAddress, 0))
+                        NetworkInterface.getByInetAddress(localAddress)?.let { socket.networkInterface = it }
+                    } catch (error: Exception) {
+                        throw IllegalStateException(
+                            "Vyhledávání televizorů se nepodařilo navázat na místní hotspot nebo síť.",
                             error
                         )
                     }

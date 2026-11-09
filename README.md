@@ -1,6 +1,6 @@
 # PureCast
 
-PureCast is an Android application for sending original photos and videos from phones to Smart TVs over the local Wi-Fi network.
+PureCast is an Android application for sending original photos and videos from phones to Smart TVs over a shared local Wi-Fi network or a phone hotspot.
 
 ## Platform scope
 
@@ -8,13 +8,21 @@ PureCast is an Android application for sending original photos and videos from p
 - Target phone families: Samsung Galaxy, Xiaomi and Redmi.
 - The same Android APK runs on all three families. Brand detection is used for diagnostics; the transfer implementation is manufacturer-neutral.
 - Other compatible Android phones are not blocked.
-- Multiple Android phones can contribute to a temporary shared queue on the same Wi-Fi network. One phone hosts the session and controls DLNA playback; each sender keeps and streams its own original media. Shared sessions cap membership at 16 phones, rate-limit incorrect invite codes, and bound rate-limit tracking memory. Shared queue client requests use the selected Wi-Fi route and bounded JSON response reads; the server accepts only strictly framed, fixed-length JSON requests and rejects ambiguous HTTP bodies.
+- Multiple Android phones can contribute to a temporary shared queue on the same local Wi-Fi network or phone hotspot. One phone hosts the session and controls DLNA playback; each sender keeps and streams its own original media. Shared sessions cap membership at 16 phones, rate-limit incorrect invite codes, and bound rate-limit tracking memory. Shared queue client requests use the selected Wi-Fi route and bounded JSON response reads; the server accepts only strictly framed, fixed-length JSON requests and rejects ambiguous HTTP bodies.
+
+## Mobile data and phone hotspot
+
+- Mobile data by itself (LTE/5G) is not a direct local network path to a TV. DLNA discovery and the media HTTP stream require the phone and TV to share a reachable local network.
+- When there is no router Wi-Fi, enable the phone's personal hotspot and connect the TV to it. The phone can keep its mobile-data connection active for internet access; PureCast sends the selected media locally over the hotspot, not through a public relay or an internet upload.
+- This also applies to a shared queue: participating phones must join the same local Wi-Fi or hotspot as the host phone.
+- Hotspot availability and client-to-host communication depend on the Android manufacturer's tethering implementation and hotspot isolation settings. A guest network or client isolation can still block connections.
+- High-bitrate 4K/high-frame-rate playback may be limited by the hotspot's local Wi-Fi capacity even though the video does not consume the phone's mobile-data allowance.
 
 ## Core rule: Direct Play
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.21.0
+## Current implementation — 0.22.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes, custom adaptive PureCast launcher icon.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
@@ -25,6 +33,8 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - Automatic DLNA playback-state and timeline refresh every three seconds, with pause/resume/stop controls enabled according to the TV-reported state.
 - ConnectionManager GetProtocolInfo parsing with conservative MIME-type compatibility reporting; DLNA SOAP commands use the active Wi-Fi network when available.
 - Local HTTP streaming of the original selected URI with byte-range support, Wi-Fi-interface binding, bounded client concurrency (up to 8 active workers plus 16 queued requests, with idle workers released after 30 seconds), validated MIME response headers and active-connection cleanup. Large transfers use reusable 256 KiB per-worker copy buffers, a 64 KiB response buffer and a best-effort 512 KiB TCP send-buffer hint. Copy loops handle short or temporarily zero-length reads and verify exact range lengths without buffering entire media files.
+- Local IPv4 binding now also checks Android SoftAP/hotspot and supported Ethernet/tethering interfaces when the device does not expose a regular Wi-Fi Network object; carrier-data, VPN and loopback interfaces are excluded.
+- SSDP discovery can bind to the selected hotspot/local interface when Android does not expose a Wi-Fi Network object, and reports clearly when only mobile data is available.
 - Live media-transfer diagnostics in the playback panel: rolling five-second application send rate (Mb/s and MiB/s), total media bytes handed to the output stream, active/peak transfers, completed/interrupted stream counts and source-video bitrate when Android can read it. The displayed rate is an application-output measurement, not Wi-Fi link speed or proof of TV decoding.
 - Strict shared-queue HTTP request parsing: validates request lines and header syntax, rejects duplicate headers, chunked or encoded bodies, requires a valid fixed Content-Length and JSON content type for POST, caps request sizes, and handles zero-length bulk reads without hanging.
 - TV browser fallback page with responsive playback UI, video MIME hints and actual image load/error feedback including decoded dimensions. The image element and its MIME feedback are checked in the packaged APK.
@@ -50,7 +60,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 
 ## Shared queue requirements and limitations
 
-- All phones and the TV must use the same trusted, non-guest Wi-Fi network without client/AP isolation.
+- All phones and the TV must use the same trusted, non-guest local Wi-Fi network or the host phone's hotspot, without client/AP isolation.
 - The host app must remain running. A sender phone must remain available while its queued item is being played; force-stop, process termination or a network change can break its media URL.
 - Shared media URLs expire after six hours. Re-add an item if its link expires.
 - The shared session is in memory only. Closing the host app or stopping its process ends the group; reconnecting after a process restart is not supported yet.
@@ -70,7 +80,7 @@ Samsung Smart TVs from 2016 onward use the Tizen platform, but codec and media s
 
 - Android Studio with Android SDK Platform 36 installed.
 - JDK 17 or newer supported by the selected Android Gradle Plugin.
-- Phone and TV on the same non-guest Wi-Fi network. Client isolation, VPNs and router multicast filtering can block discovery or playback.
+- Phone and TV on the same trusted local Wi-Fi network or phone hotspot. Client isolation, VPNs and router multicast filtering can block discovery or playback.
 
 ## Build
 
@@ -94,7 +104,7 @@ PureCast does not bundle a video transcoder, codec framework, sample photos, sam
 
 PureCast transports the original encoded file; it does not decode, re-encode or generate extra frames. A "4K/120 fps" label alone does not define the required network speed: the actual file bitrate, codec/profile, bit depth, HDR format and audio track all matter. The TV must also decode that exact format and frame rate.
 
-For demanding files, use a strong local Wi-Fi connection or wired LAN where possible, keep the phone and TV on the same non-guest network, and avoid client isolation. A Wi-Fi link-rate indicator is not a measurement of sustained application throughput. The phone must be able to read the original file and sustain a send rate above its encoded bitrate; weak signal, interference, busy storage or TV decoder limits can still cause buffering or playback failure.
+For demanding files, use a strong local Wi-Fi connection, wired LAN, or a good-quality phone hotspot where appropriate, keep the phone and TV on the same non-guest network, and avoid client isolation. A Wi-Fi link-rate indicator is not a measurement of sustained application throughput. The phone must be able to read the original file and sustain a send rate above its encoded bitrate; weak signal, interference, busy storage or TV decoder limits can still cause buffering or playback failure.
 
 CI now exercises large synthetic copies and four concurrent streams, but that does not certify a real 4K/120 fps end-to-end setup. Actual validation needs a known high-bitrate sample, the target phone, router and exact TV model/firmware. PureCast deliberately reports compatibility limits rather than lowering quality through transcoding.
 

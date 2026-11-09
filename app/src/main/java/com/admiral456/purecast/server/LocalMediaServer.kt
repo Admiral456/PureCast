@@ -1,7 +1,6 @@
 package com.admiral456.purecast.server
 
 import android.content.Context
-import android.net.ConnectivityManager
 import android.net.Uri
 import com.admiral456.purecast.media.MediaFile
 import com.admiral456.purecast.network.WifiNetworkResolver
@@ -11,7 +10,6 @@ import java.io.Closeable
 import java.io.OutputStream
 import java.net.Inet4Address
 import java.net.InetSocketAddress
-import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.ArrayBlockingQueue
@@ -73,7 +71,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
     @Synchronized
     fun publish(media: MediaFile): String {
         val address = findLocalIpv4()
-            ?: throw IllegalStateException("Telefon není připojený k použitelné místní IPv4 síti.")
+            ?: throw IllegalStateException("Telefon není připojený k použitelné místní Wi-Fi, hotspot nebo Ethernet IPv4 síti.")
         val server = ensureServer(address)
         val token = MediaTokenGenerator.create()
         mediaByToken[token] = PublishedMedia(media, System.currentTimeMillis() + TOKEN_LIFETIME_MS)
@@ -454,44 +452,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
         mediaByToken.entries.removeAll { it.value.expiresAtMillis < now }
     }
 
-    private fun findLocalIpv4(): Inet4Address? {
-        WifiNetworkResolver.activeWifiIpv4(context)?.let { return it }
-        val candidates = mutableListOf<Pair<Int, Inet4Address>>()
-        val interfaces = NetworkInterface.getNetworkInterfaces()
-        if (interfaces != null) {
-            while (interfaces.hasMoreElements()) {
-                val networkInterface = interfaces.nextElement()
-                if (!networkInterface.isUp || networkInterface.isLoopback) continue
-                val preference = when {
-                    networkInterface.name.startsWith("wlan", true) -> 0
-                    networkInterface.name.startsWith("wifi", true) -> 1
-                    networkInterface.name.startsWith("ap", true) -> 2
-                    networkInterface.name.startsWith("eth", true) -> 3
-                    else -> 5
-                }
-                if (networkInterface.name.startsWith("tun", true) ||
-                    networkInterface.name.startsWith("ppp", true) ||
-                    networkInterface.name.startsWith("rmnet", true)
-                ) continue
-                val addresses = networkInterface.inetAddresses
-                while (addresses.hasMoreElements()) {
-                    val address = addresses.nextElement()
-                    if (address is Inet4Address && address.isSiteLocalAddress && !address.isLoopbackAddress) {
-                        candidates.add(preference to address)
-                    }
-                }
-            }
-        }
-        candidates.minByOrNull { it.first }?.second?.let { return it }
-
-        val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val properties = connectivity.activeNetwork?.let(connectivity::getLinkProperties)
-        return properties?.linkAddresses
-            ?.asSequence()
-            ?.map { it.address }
-            ?.filterIsInstance<Inet4Address>()
-            ?.firstOrNull { it.isSiteLocalAddress && !it.isLoopbackAddress }
-    }
+    private fun findLocalIpv4(): Inet4Address? = WifiNetworkResolver.localLanIpv4(context)
 
     override fun close() {
         try {

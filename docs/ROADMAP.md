@@ -15,6 +15,7 @@
 - [x] SSDP discovery for UPnP MediaRenderer devices.
 - [x] Prefer active Wi-Fi route for SSDP requests and TV-description retrieval.
 - [x] Prefer an active Wi-Fi IPv4 address when creating TV playback links.
+- [x] Resolve a reachable local IPv4 address from Android SoftAP/hotspot and supported Ethernet/tethering interfaces when no regular Wi-Fi Network is exposed.
 - [x] Secure device-description XML parsing and optional URLBase resolution.
 - [x] AVTransport SetAVTransportURI, Play, Pause, Stop, Seek and state/position queries.
 - [x] Automatically refresh DLNA playback state and timeline, with state-aware pause/resume/stop controls.
@@ -42,6 +43,7 @@
 - [x] Skip non-image and non-video documents from the document picker.
 - [x] Route DLNA SOAP commands and shared-queue client requests over the active Wi-Fi network when available.
 - [x] Fail clearly if the SSDP multicast socket cannot bind to the selected Wi-Fi network.
+- [x] Bind SSDP discovery to a local hotspot/Ethernet interface when Android exposes no Wi-Fi Network object, and explain that cellular data alone is insufficient.
 - [x] Limit UPnP device descriptions, SOAP replies and shared-queue JSON replies to 1 MiB before parsing.
 - [x] Verify TV-browser image element wiring in the packaged APK.
 - [x] Validate MIME values before using them in HTTP response headers and TV-browser attributes.
@@ -54,6 +56,7 @@
 ## Milestone 1 — Samsung and LG real-device interoperability
 
 - [ ] Test discovery and playback on Samsung Tizen Smart TVs from more than one model year.
+- [ ] Test TV discovery and Direct Play while the sender phone provides its own mobile-data-backed hotspot on Samsung, Xiaomi and Redmi devices.
 - [ ] Test discovery and playback on LG 55UJ7507.
 - [ ] Capture real SSDP replies and UPnP service descriptions from Samsung and LG firmware.
 - [ ] Verify Samsung and LG browser fallback with JPEG and H.264/AAC MP4.
@@ -64,6 +67,7 @@
 ## Milestone 2 — multi-phone and library features
 
 - [x] Allow multiple Android phone brands to run the same APK.
+- [x] Allow shared-queue hosting on a reachable phone-hotspot/local IPv4 interface.
 - [x] Gallery with image/video thumbnails, filename search and media-type filters.
 - [x] Local playback queue with add/remove, reorder, start-from-beginning, previous and next controls.
 - [x] Queue navigation stops at the first/last item and is covered by unit tests.

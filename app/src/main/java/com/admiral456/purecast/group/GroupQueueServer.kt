@@ -60,8 +60,8 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
     @Synchronized
     fun start(): GroupQueueCredentials {
         if (serverSocket?.isClosed == false) return hostCredentials()
-        val ip = WifiNetworkResolver.activeWifiIpv4(appContext)
-            ?: throw IllegalStateException("Telefon není připojený k použitelné Wi-Fi IPv4 síti.")
+        val ip = WifiNetworkResolver.localLanIpv4(appContext)
+            ?: throw IllegalStateException("Telefon není připojený k použitelné místní Wi-Fi, hotspot nebo Ethernet IPv4 síti.")
         val socket = ServerSocket()
         socket.reuseAddress = true
         socket.bind(InetSocketAddress(ip, 0))
