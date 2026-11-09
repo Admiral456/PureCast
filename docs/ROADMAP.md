@@ -46,6 +46,7 @@
 - [x] Verify TV-browser image element wiring in the packaged APK.
 - [x] Validate MIME values before using them in HTTP response headers and TV-browser attributes.
 - [x] Enforce strict unsigned-decimal syntax for HTTP byte ranges.
+- [x] Handle zero and short reads from provider-backed media streams; test exact-length copies, unknown-length copies, offset skipping and premature source termination.
 
 ## Milestone 1 — Samsung and LG real-device interoperability
 
