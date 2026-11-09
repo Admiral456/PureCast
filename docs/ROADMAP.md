@@ -96,7 +96,8 @@
 - [ ] Add integration tests for the shared-queue HTTP server/client and multi-phone media streaming.
 - [x] Keep shared playback controls visible when the currently playing item was added by another phone.
 - [x] Keep the host's foreground service active while its shared queue session is connected.
-- [ ] Validate all request paths, content ranges and response headers with integration tests.
+- [x] Strictly validate local media HTTP request lines and headers; reject duplicate/ambiguous Range headers, chunked/encoded requests and request bodies, with bounded parsing and unit tests.
+- [ ] Validate all response paths, content ranges and response headers with socket-level integration tests.
 - [x] Bind the shared queue coordinator to the active Wi-Fi IPv4 interface rather than all interfaces.
 - [ ] Before targeting Android API 37, declare and request ACCESS_LOCAL_NETWORK.
 

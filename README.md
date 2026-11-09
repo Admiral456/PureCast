@@ -22,7 +22,7 @@ PureCast is an Android application for sending original photos and videos from p
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.23.0
+## Current implementation — 0.24.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes, custom adaptive PureCast launcher icon.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
@@ -35,6 +35,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - Local HTTP streaming of the original selected URI with byte-range support, selected local-interface binding (Wi-Fi, phone hotspot or supported Ethernet), bounded client concurrency (up to 8 active workers plus 16 queued requests, with idle workers released after 30 seconds), validated MIME response headers and active-connection cleanup. Large transfers use reusable 256 KiB per-worker copy buffers, a 64 KiB response buffer and a best-effort 512 KiB TCP send-buffer hint. Copy loops handle short or temporarily zero-length reads and verify exact range lengths without buffering entire media files.
 - Local IPv4 binding prefers a phone's active SoftAP/hotspot address over its upstream Wi-Fi client address, then checks supported Ethernet/tethering interfaces; carrier-data, VPN and loopback interfaces are excluded.
 - DLNA SOAP, SSDP device-description and shared-queue client requests select an Android Network by the destination device's matching connected route instead of blindly binding to whichever Wi-Fi network is active.
+- The local media HTTP server now strictly validates request lines and headers, rejects duplicate headers (including ambiguous Range headers), malformed framing, chunked/encoded requests and unexpected bodies; parsing is bounded and tested independently.
 - SSDP discovery can bind to the selected hotspot/local interface when Android does not expose a Wi-Fi Network object, and reports clearly when only mobile data is available.
 - Live media-transfer diagnostics in the playback panel: rolling five-second application send rate (Mb/s and MiB/s), total media bytes handed to the output stream, active/peak transfers, completed/interrupted stream counts and source-video bitrate when Android can read it. The displayed rate is an application-output measurement, not Wi-Fi link speed or proof of TV decoding.
 - Strict shared-queue HTTP request parsing: validates request lines and header syntax, rejects duplicate headers, chunked or encoded bodies, requires a valid fixed Content-Length and JSON content type for POST, caps request sizes, and handles zero-length bulk reads without hanging.

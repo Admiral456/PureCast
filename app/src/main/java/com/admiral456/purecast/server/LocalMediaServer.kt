@@ -5,8 +5,8 @@ import android.net.Uri
 import com.admiral456.purecast.media.MediaFile
 import com.admiral456.purecast.network.WifiNetworkResolver
 import java.io.BufferedOutputStream
-import java.io.ByteArrayOutputStream
 import java.io.Closeable
+import java.io.IOException
 import java.io.OutputStream
 import java.net.Inet4Address
 import java.net.InetSocketAddress
@@ -159,31 +159,18 @@ class LocalMediaServer(private val context: Context) : Closeable {
     private fun handleClient(socket: Socket) {
         socket.use { client ->
             client.soTimeout = 20_000
-            val headerBytes = ByteArrayOutputStream()
-            var matched = 0
-            val terminator = byteArrayOf(13, 10, 13, 10)
-            val input = client.getInputStream()
-
-            while (headerBytes.size() < MAX_HEADER_BYTES) {
-                val next = input.read()
-                if (next < 0) return
-                headerBytes.write(next)
-                matched = when {
-                    next == terminator[matched].toInt() -> matched + 1
-                    next == 13 -> 1
-                    else -> 0
-                }
-                if (matched == terminator.size) break
-            }
-            if (matched != terminator.size) {
+            val parsedRequest = try {
+                MediaRequestParser.read(client.getInputStream(), MAX_HEADER_BYTES)
+            } catch (_: MediaRequestParser.HeadersTooLarge) {
                 writeSimpleResponse(client, 431, "Request Header Fields Too Large")
                 return
-            }
+            } catch (_: IOException) {
+                writeSimpleResponse(client, 400, "Bad Request")
+                return
+            } ?: return
 
-            val lines = String(headerBytes.toByteArray(), Charsets.ISO_8859_1).split("\r\n")
-            val request = lines.firstOrNull()?.split(' ') ?: return
-            val method = request.getOrNull(0)?.uppercase().orEmpty()
-            val target = request.getOrNull(1).orEmpty()
+            val method = parsedRequest.method
+            val target = parsedRequest.target
             if (method != "GET" && method != "HEAD") {
                 writeSimpleResponse(client, 405, "Method Not Allowed")
                 return
@@ -208,12 +195,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
                 return
             }
 
-            val headers = lines.drop(1).mapNotNull { line ->
-                val colon = line.indexOf(':')
-                if (colon <= 0) null else {
-                    line.substring(0, colon).trim().lowercase() to line.substring(colon + 1).trim()
-                }
-            }.toMap()
+            val headers = parsedRequest.headers
 
             val asset = try {
                 context.contentResolver.openAssetFileDescriptor(published.media.uri, "r")
