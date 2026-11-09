@@ -1971,6 +1971,8 @@ private fun PureCastScreen() {
     }
 }
 
+}
+
 @Composable
 private fun MediaThumbnail(media: MediaFile) {
     val context = LocalContext.current
