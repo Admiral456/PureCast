@@ -37,7 +37,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - Image and video thumbnail previews, lazily loaded as gallery items become visible, with memory-conscious handling for older Android versions.
 - Gallery search by filename and photo/video filters.
 - Media library sorting by newest available modification date, filename and file size, with unknown metadata kept at the end.
-- Album filters based on Android MediaStore bucket names when the content provider exposes them; document-picker items without album metadata remain available under all albums.
+- Album filters based on Android MediaStore bucket names when the content provider exposes them; importing new media resets a stale album filter, and removing the last item from a selected album clears that filter. Document-picker items without album metadata remain available under all albums.
 - Progressive technical metadata inspection in small batches, with cancellation when a new selection replaces the previous one.
 - Technical metadata inspection for image size and video resolution, frame rate, video/audio MIME codecs, bitrate, duration and available HDR transfer metadata.
 - Unit tests for HTTP range handling, bounded network response reads, invite-code rate limiting and expiry, UPnP time values, DLNA MIME profiles and sender/receiver brand classification.
