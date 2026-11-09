@@ -1485,8 +1485,6 @@ private fun PureCastScreen() {
                     }
                 }
             }
-        }
-
         } else {
             item {
                 SectionTitle("Fronta přehrávání", "Zde najdeš média, která chceš přehrát za sebou.")
