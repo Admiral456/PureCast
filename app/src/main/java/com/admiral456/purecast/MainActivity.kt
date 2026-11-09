@@ -102,6 +102,7 @@ import com.admiral456.purecast.playback.PlaybackQueueLogic
 import com.admiral456.purecast.playback.PlaybackControlAvailability
 import com.admiral456.purecast.playback.PureCastPlaybackService
 import com.admiral456.purecast.playback.PureCastRuntime
+import com.admiral456.purecast.server.TransferMetricsSnapshot
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -203,10 +204,19 @@ private fun PureCastScreen() {
     var positionInfo by remember { mutableStateOf<DlnaPositionInfo?>(null) }
     var seekPreviewSeconds by remember { mutableStateOf(0f) }
     var isSeekingPlayback by remember { mutableStateOf(false) }
+    var transferStats by remember { mutableStateOf(TransferMetricsSnapshot()) }
 
     val activeDevice = devices.firstOrNull { it.id == selectedDeviceId }
     DisposableEffect(groupServer) {
         onDispose { groupServer?.close() }
+    }
+
+    LaunchedEffect(Unit) {
+        val mediaServer = PureCastRuntime.getMediaServer(appContext)
+        while (true) {
+            transferStats = mediaServer.transferStats()
+            delay(1_000)
+        }
     }
 
     LaunchedEffect(sharedCredentials, groupServer) {
@@ -1651,6 +1661,52 @@ private fun PureCastScreen() {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(playingTitle.orEmpty(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(playingDevice?.friendlyName ?: "Režim prohlížeče televize", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(
+                            modifier = Modifier.fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Živý přenos dat", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.weight(1f))
+                                StatusTag(
+                                    if (transferStats.activeTransfers > 0) "PŘENÁŠÍ SE" else "ČEKÁ",
+                                    if (transferStats.activeTransfers > 0) MaterialTheme.colorScheme.secondary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Aktuální odesílání", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.weight(1f))
+                                Text(
+                                    formatTransferSpeed(transferStats.currentBytesPerSecond),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Text(
+                                "Odesláno od spuštění serveru: ${formatSize(transferStats.totalBytesSent)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "Současná spojení: ${transferStats.activeTransfers} · maximum: ${transferStats.peakConcurrentTransfers}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "Dokončeno: ${transferStats.completedTransfers} · přerušeno: ${transferStats.interruptedTransfers}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "Rychlost měří data předaná výstupu aplikace. Není to zaručená rychlost Wi-Fi ani potvrzení, že televize video dekóduje.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         if (playingDevice != null) {
                         if (playingSharedEntryId != null) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1928,6 +1984,12 @@ private fun EmptyState(title: String, body: String) {
 
 private fun formatPlaybackTime(seconds: Long?): String =
     seconds?.let(UpnpTime::formatSeconds) ?: "--:--:--"
+
+private fun formatTransferSpeed(bytesPerSecond: Long): String {
+    val megabits = bytesPerSecond.coerceAtLeast(0L) * 8.0 / 1_000_000.0
+    val mebibytes = bytesPerSecond.coerceAtLeast(0L) / (1024.0 * 1024.0)
+    return String.format(Locale.US, "%.1f Mb/s · %.1f MiB/s", megabits, mebibytes)
+}
 
 private fun formatBitrate(bitsPerSecond: Long): String {
     val megabits = bitsPerSecond / 1_000_000.0
