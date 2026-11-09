@@ -7,14 +7,45 @@ import android.graphics.ImageDecoder
 import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.util.Size
+import java.util.concurrent.Semaphore
 import kotlin.math.roundToInt
 
 object MediaThumbnailLoader {
+    // Android image/video decoders are native and can be memory intensive on some devices.
+    // Serialize thumbnail work instead of opening several decoders as a gallery list composes.
+    private val decodePermit = Semaphore(1, true)
+
     fun load(
         context: Context,
         media: MediaFile,
         targetWidth: Int = 320,
         targetHeight: Int = 240
+    ): Bitmap? {
+        try {
+            decodePermit.acquire()
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            return null
+        }
+        return try {
+            loadLocked(
+                context,
+                media,
+                targetWidth.coerceIn(1, MAX_THUMBNAIL_EDGE),
+                targetHeight.coerceIn(1, MAX_THUMBNAIL_EDGE)
+            )
+        } catch (_: Exception) {
+            null
+        } finally {
+            decodePermit.release()
+        }
+    }
+
+    private fun loadLocked(
+        context: Context,
+        media: MediaFile,
+        targetWidth: Int,
+        targetHeight: Int
     ): Bitmap? {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val providerThumbnail = runCatching {
@@ -100,7 +131,7 @@ object MediaThumbnailLoader {
 
             val options = BitmapFactory.Options().apply {
                 inSampleSize = calculateInSampleSize(bounds, targetWidth, targetHeight)
-                inPreferredConfig = Bitmap.Config.ARGB_8888
+                inPreferredConfig = Bitmap.Config.RGB_565
             }
             val decoded = context.contentResolver.openInputStream(media.uri)?.use {
                 BitmapFactory.decodeStream(it, null, options)
@@ -140,5 +171,6 @@ object MediaThumbnailLoader {
         return scaled
     }
 
+    private const val MAX_THUMBNAIL_EDGE = 1_024
     private const val MAX_UNSCALED_VIDEO_PIXELS = 12_000_000L
 }

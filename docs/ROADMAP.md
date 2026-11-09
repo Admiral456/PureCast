@@ -1,5 +1,13 @@
 # PureCast roadmap
 
+## 0.25.0 — Safer media import (in progress)
+- Do not run technical inspection across every picked photo and video immediately after selection.
+- Bound and deduplicate picker results to the 50-item library limit.
+- Tolerate Photo Picker and document-provider differences in optional metadata queries.
+- Serialize thumbnail decoding and use smaller fallback bitmaps to reduce decoder memory pressure.
+- Add deterministic unit tests for import limits and available library capacity.
+
+
 ## Milestone 0 — Android cross-brand foundation
 
 - [x] Android/Kotlin/Jetpack Compose application; no iOS target.

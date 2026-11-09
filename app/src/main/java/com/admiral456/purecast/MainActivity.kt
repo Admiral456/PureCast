@@ -83,12 +83,11 @@ import com.admiral456.purecast.dlna.DlnaTransportInfo
 import com.admiral456.purecast.dlna.DlnaPositionInfo
 import com.admiral456.purecast.dlna.UpnpTime
 import com.admiral456.purecast.media.MediaFile
-import com.admiral456.purecast.media.MediaInspector
+import com.admiral456.purecast.media.MediaImportPolicy
 import com.admiral456.purecast.media.MediaKindFilter
 import com.admiral456.purecast.media.MediaLibraryFilter
 import com.admiral456.purecast.media.MediaLibrarySort
 import com.admiral456.purecast.media.MediaThumbnailLoader
-import com.admiral456.purecast.media.MediaTechnicalInfo
 import com.admiral456.purecast.media.MediaStoreGallery
 import com.admiral456.purecast.permissions.GalleryAccessPolicy
 import com.admiral456.purecast.group.GroupQueueClient
@@ -106,9 +105,6 @@ import com.admiral456.purecast.server.TransferMetricsSnapshot
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -173,8 +169,7 @@ private fun PureCastScreen() {
     var sharedBusy by remember { mutableStateOf(false) }
     var sharedSyncError by remember { mutableStateOf<String?>(null) }
     var participantPendingRemoval by remember { mutableStateOf<GroupQueueParticipant?>(null) }
-    val technicalInfo = remember { mutableStateMapOf<String, MediaTechnicalInfo>() }
-    var mediaInspectionJob by remember { mutableStateOf<Job?>(null) }
+    var isImportingMedia by remember { mutableStateOf(false) }
     var mediaSearchQuery by remember { mutableStateOf("") }
     var mediaKindFilter by remember { mutableStateOf(MediaKindFilter.ALL) }
     var mediaSort by remember { mutableStateOf(MediaLibrarySort.NEWEST) }
@@ -282,73 +277,68 @@ private fun PureCastScreen() {
 
     fun importMediaUris(uris: List<Uri>, appendToLibrary: Boolean) {
         if (uris.isEmpty()) return
-        uris.forEach { uri ->
-            try {
-                appContext.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (_: SecurityException) {
-                // Some picker implementations provide temporary grants only.
-            } catch (_: IllegalArgumentException) {
-                // Some picker implementations do not offer persistable grants.
-            }
+        if (isImportingMedia) {
+            status = "Předchozí výběr se ještě zpracovává."
+            return
         }
-        mediaInspectionJob?.cancel()
-        mediaInspectionJob = scope.launch {
-            val importedFiles = withContext(Dispatchers.IO) {
-                uris.distinctBy { it.toString() }
-                    .mapNotNull { uri -> runCatching { MediaFile.fromUri(appContext, uri) }.getOrNull() }
-            }
-            val mediaFiles = importedFiles.filter { it.isPlayableMedia }
-            val existingUris = if (appendToLibrary) selectedFiles.map { it.uri }.toSet() else emptySet()
-            val availableSlots = if (appendToLibrary) {
-                (MAX_SELECTED_MEDIA - selectedFiles.size).coerceAtLeast(0)
-            } else {
-                MAX_SELECTED_MEDIA
-            }
-            val uniqueFiles = mediaFiles.filterNot { it.uri in existingUris }
-            val files = uniqueFiles.take(availableSlots)
-            val skippedNonMedia = importedFiles.size - mediaFiles.size
 
-            if (!appendToLibrary) {
-                technicalInfo.clear()
-                selectedFiles.clear()
-                selectedAlbum = null
-            }
-            selectedFiles.addAll(files)
-            if (files.isNotEmpty()) {
-                // New imports should not stay hidden behind a filter for a different album.
-                selectedAlbum = null
-            }
-            mediaSearchQuery = ""
-            mediaKindFilter = MediaKindFilter.ALL
-            isError = importedFiles.isEmpty() || mediaFiles.isEmpty() ||
-                (files.isEmpty() && availableSlots == 0)
-            status = when {
-                importedFiles.isEmpty() -> "Vybrané soubory se nepodařilo načíst."
-                mediaFiles.isEmpty() -> "Výběr neobsahuje rozpoznané obrázky ani videa. Ostatní dokumenty PureCast nepřehrává."
-                files.isEmpty() && availableSlots == 0 -> "Knihovna už obsahuje maximum $MAX_SELECTED_MEDIA souborů."
-                files.isEmpty() -> "Vybrané obrázky a videa už v knihovně jsou."
-                uniqueFiles.size > files.size ->
-                    "Přidáno ${files.size} médií. Knihovna podporuje nejvýše $MAX_SELECTED_MEDIA položek."
-                skippedNonMedia > 0 ->
-                    "Načteno ${files.size} obrázků a videí. Ostatní dokumenty byly přeskočeny."
-                else -> "Načteno ${files.size} souborů. Náhledy a technické údaje se připravují na pozadí."
-            }
+        val candidateUris = MediaImportPolicy.boundedDistinct(
+            items = uris,
+            maxItems = MAX_SELECTED_MEDIA,
+            keyOf = { it.toString() }
+        )
+        if (candidateUris.isEmpty()) return
 
-            files.chunked(3).forEach { batch ->
-                val details = batch.map { file ->
-                    async(Dispatchers.IO) {
+        scope.launch {
+            isImportingMedia = true
+            isError = false
+            try {
+                val importedFiles = withContext(Dispatchers.IO) {
+                    candidateUris.mapNotNull { uri ->
                         runCatching {
-                            MediaInspector.inspect(appContext, file)?.let { file.uri.toString() to it }
-                        }.getOrNull()
+                            appContext.contentResolver.takePersistableUriPermission(
+                                uri,
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        }
+                        runCatching { MediaFile.fromUri(appContext, uri) }.getOrNull()
                     }
-                }.awaitAll().filterNotNull()
-                details.forEach { (uri, info) -> technicalInfo[uri] = info }
-            }
-            if (files.isNotEmpty()) {
-                status = "Připraveno ${selectedFiles.size} souborů. Vyber televizi a spusť přehrávání."
+                }
+                val mediaFiles = importedFiles.filter { it.isPlayableMedia }
+                val replaceCurrentLibrary = !appendToLibrary && mediaFiles.isNotEmpty()
+                val existingUris = if (appendToLibrary) selectedFiles.map { it.uri }.toSet() else emptySet()
+                val uniqueFiles = mediaFiles.filterNot { it.uri in existingUris }
+                val currentCount = if (replaceCurrentLibrary) 0 else selectedFiles.size
+                val availableSlots = MediaImportPolicy.availableSlots(currentCount, MAX_SELECTED_MEDIA)
+                val files = uniqueFiles.take(availableSlots)
+                val skippedNonMedia = importedFiles.size - mediaFiles.size
+
+                if (replaceCurrentLibrary) {
+                    selectedFiles.clear()
+                    selectedAlbum = null
+                }
+                selectedFiles.addAll(files)
+                if (files.isNotEmpty()) selectedAlbum = null
+                mediaSearchQuery = ""
+                mediaKindFilter = MediaKindFilter.ALL
+                isError = importedFiles.isEmpty() || mediaFiles.isEmpty() ||
+                    (files.isEmpty() && availableSlots == 0)
+                status = when {
+                    importedFiles.isEmpty() -> "Android neposkytl přístup k vybraným souborům. Zkus výběr zopakovat."
+                    mediaFiles.isEmpty() -> "Výběr neobsahuje rozpoznané fotografie ani videa. Původní knihovna zůstala zachována."
+                    files.isEmpty() && availableSlots == 0 -> "Knihovna už obsahuje maximum $MAX_SELECTED_MEDIA souborů."
+                    files.isEmpty() -> "Vybrané fotografie a videa už v knihovně jsou."
+                    candidateUris.size < uris.distinctBy { it.toString() }.size -> "Načteno ${files.size} médií. Kvůli stabilitě lze najednou zpracovat nejvýše $MAX_SELECTED_MEDIA položek."
+                    skippedNonMedia > 0 -> "Načteno ${files.size} fotografií a videí. Ostatní dokumenty byly přeskočeny."
+                    else -> "Načteno ${files.size} médií. Náhledy se připravují postupně."
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                isError = true
+                status = error.message ?: "Vybraná média se nepodařilo bezpečně načíst."
+            } finally {
+                isImportingMedia = false
             }
         }
     }
@@ -1113,6 +1103,7 @@ private fun PureCastScreen() {
                         onClick = {
                             mediaPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
                         },
+                        enabled = !isImportingMedia,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp)
                     ) {
@@ -1122,6 +1113,7 @@ private fun PureCastScreen() {
                         onClick = {
                             documentPicker.launch(arrayOf("*/*"))
                         },
+                        enabled = !isImportingMedia,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp)
                     ) {
@@ -1216,6 +1208,17 @@ private fun PureCastScreen() {
                             }
                         }
                     }
+                    if (isImportingMedia) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(10.dp))
+                            Text("Bezpečně načítám vybraná média…", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                     if (selectedFiles.isEmpty()) {
                         EmptyState("Zatím tu nic není", "Vyber jednu nebo více fotek či videí a potom je odešli do televize.")
                     } else if (visibleFiles.isEmpty()) {
@@ -1258,7 +1261,6 @@ private fun PureCastScreen() {
                                                                     selectedFiles,
                                                                     selectedAlbum
                                                                 ) { it.albumName }
-                                                                technicalInfo.remove(file.uri.toString())
                                                                 val queuedIndex = playbackQueue.indexOfFirst { it.uri == file.uri }
                                                                 if (queuedIndex >= 0) removeFromQueue(queuedIndex)
                                                             },
@@ -1277,26 +1279,6 @@ private fun PureCastScreen() {
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                                     )
-                                                    technicalInfo[file.uri.toString()]?.let { info ->
-                                                        val technicalParts = listOfNotNull(
-                                                            info.resolutionLabel(),
-                                                            info.frameRate?.let { String.format(Locale.US, "%.2f FPS", it) },
-                                                            info.videoMimeType,
-                                                            info.audioMimeTypes.firstOrNull(),
-                                                            info.bitrateBitsPerSecond?.let(::formatBitrate),
-                                                            info.durationMillis?.let { "Délka " + formatPlaybackTime(it / 1_000L) },
-                                                            if (file.isVideo) "HDR " + (info.hdrLabel ?: "neověřeno") else null
-                                                        )
-                                                        if (technicalParts.isNotEmpty()) {
-                                                            Text(
-                                                                technicalParts.joinToString(" · "),
-                                                                style = MaterialTheme.typography.labelSmall,
-                                                                color = MaterialTheme.colorScheme.secondary,
-                                                                maxLines = 2,
-                                                                overflow = TextOverflow.Ellipsis
-                                                            )
-                                                        }
-                                                    }
                                                 }
                                             }
                                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -1686,15 +1668,6 @@ private fun PureCastScreen() {
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
-                            }
-                            playingFile?.let { file ->
-                                technicalInfo[file.uri.toString()]?.bitrateBitsPerSecond?.let { sourceBitrate ->
-                                    Text(
-                                        "Bitrate zdrojového videa: ${formatBitrate(sourceBitrate)}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
                             }
                             Text(
                                 "Odesláno od spuštění serveru: ${formatSize(transferStats.totalBytesSent)}",
