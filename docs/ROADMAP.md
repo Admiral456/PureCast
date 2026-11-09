@@ -1,5 +1,12 @@
 # PureCast roadmap
 
+## 0.26.0 — Clear navigation and screen hierarchy (in progress)
+- Replace the single long mixed screen with four bottom-navigation destinations: Connect, Gallery, Queue, and Player.
+- Keep TV discovery and network status together; isolate media selection from playback controls.
+- Add clear empty states and move to the player automatically after starting playback.
+- Keep the existing DLNA transport and original-file streaming behavior unchanged.
+
+
 ## 0.25.0 — Safer media import (in progress)
 - Do not run technical inspection across every picked photo and video immediately after selection.
 - Bound and deduplicate picker results to the 50-item library limit.

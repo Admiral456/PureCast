@@ -42,6 +42,9 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Slider
@@ -110,6 +113,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val MAX_SELECTED_MEDIA = 50
+
+private enum class PureCastTab(val label: String, val glyph: String) {
+    CONNECT("Připojit", "TV"),
+    GALLERY("Galerie", "▦"),
+    QUEUE("Fronta", "≡"),
+    PLAYBACK("Přehrávač", "▶")
+}
 private const val MAX_GALLERY_SCAN_ITEMS = 250
 
 private val PureCastLight = lightColorScheme(
@@ -157,6 +167,7 @@ private fun PureCastScreen() {
     val senderInfo = remember { SenderDeviceInfo.current() }
 
     var devices by remember { mutableStateOf<List<DlnaDevice>>(emptyList()) }
+    var selectedTab by remember { mutableStateOf(PureCastTab.CONNECT) }
     var selectedDeviceId by remember { mutableStateOf<String?>(null) }
     val selectedFiles = remember { mutableStateListOf<MediaFile>() }
     val playbackQueue = remember { mutableStateListOf<MediaFile>() }
@@ -453,6 +464,7 @@ private fun PureCastScreen() {
                 positionInfo = null
                 seekPreviewSeconds = 0f
                 controller.play(device, streamUrl, file)
+                selectedTab = PureCastTab.PLAYBACK
                 status = "Příkaz k přehrání byl odeslán do ${device.friendlyName}. " + compatibilityNote
             } catch (error: Exception) {
                 playingDevice = null
@@ -554,6 +566,7 @@ private fun PureCastScreen() {
                 playingSharedEntryId = null
                 transportInfo = null
                 positionInfo = null
+                selectedTab = PureCastTab.PLAYBACK
                 status = "Odkaz pro TV prohlížeč je připraven. Otevři jej přímo na televizi."
             } catch (error: Exception) {
                 isError = true
@@ -688,6 +701,7 @@ private fun PureCastScreen() {
                 playingDevice = device
                 playingFile = null
                 playingTitle = entry.title
+                selectedTab = PureCastTab.PLAYBACK
                 playingSharedEntryId = entry.id
                 browserUrl = null
                 transportInfo = null
@@ -892,11 +906,37 @@ private fun PureCastScreen() {
         )
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 5.dp
+            ) {
+                PureCastTab.values().forEach { tab ->
+                    NavigationBarItem(
+                        selected = selectedTab == tab,
+                        onClick = { selectedTab = tab },
+                        icon = {
+                            Text(
+                                tab.glyph,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        label = { Text(tab.label, maxLines = 1) },
+                        alwaysShowLabel = true
+                    )
+                }
+            }
+        }
+    ) { scaffoldPadding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(scaffoldPadding),
+            contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+        if (selectedTab == PureCastTab.CONNECT) {
         item {
             Box(
                 modifier = Modifier
@@ -1033,7 +1073,9 @@ private fun PureCastScreen() {
                 }
             }
         }
+        }
 
+        if (selectedTab == PureCastTab.GALLERY) {
         item {
             SectionTitle("Fotky a videa", "Vyber originální soubory z telefonu. PureCast je nebude převádět.")
             Card(
@@ -1342,6 +1384,9 @@ private fun PureCastScreen() {
                 }
             }
 
+        }
+
+        if (selectedTab == PureCastTab.QUEUE) {
         if (playbackQueue.isNotEmpty()) {
             item {
                 SectionTitle("Fronta přehrávání", "Připrav si pořadí médií a přepínej mezi nimi bez nového výběru.")
@@ -1438,6 +1483,22 @@ private fun PureCastScreen() {
                             )
                         }
                     }
+                }
+            }
+        }
+
+        } else {
+            item {
+                SectionTitle("Fronta přehrávání", "Zde najdeš média, která chceš přehrát za sebou.")
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    EmptyState(
+                        "Fronta je prázdná",
+                        "Otevři galerii, vyber fotky nebo videa a přidej je do fronty."
+                    )
                 }
             }
         }
@@ -1633,6 +1694,9 @@ private fun PureCastScreen() {
             }
         }
 
+        }
+
+        if (selectedTab == PureCastTab.PLAYBACK) {
         if (playingTitle != null) {
             item {
                 SectionTitle("Přehrávání", "Vyber režim přehrávání podle možností své televize.")
@@ -1862,6 +1926,35 @@ private fun PureCastScreen() {
             }
         }
 
+        } else {
+            item {
+                SectionTitle("Přehrávání", "Tady najdeš stav přenosu a ovládání vybraného média.")
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        EmptyState(
+                            "Zatím se nic nepřehrává",
+                            "Nejprve vyber média a připoj televizi. Stav přenosu se zobrazí právě tady."
+                        )
+                        Button(
+                            onClick = { selectedTab = PureCastTab.GALLERY },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp)
+                        ) { Text("Otevřít galerii") }
+                    }
+                }
+            }
+        }
+        }
+
+        if (selectedTab == PureCastTab.CONNECT) {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1877,6 +1970,7 @@ private fun PureCastScreen() {
                     )
                 }
             }
+        }
         }
     }
 }
