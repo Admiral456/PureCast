@@ -4,93 +4,52 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
-import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.util.Size
-import java.util.concurrent.Semaphore
 import kotlin.math.roundToInt
 
+/**
+ * Generates small previews only. It must never prepare or alter the media file used for streaming.
+ *
+ * Video frame extraction is intentionally not used as a fallback: MediaMetadataRetriever invokes
+ * native codec components and some OEM codec stacks can fail on unusual/high-resolution clips.
+ * If Android's media provider cannot supply a thumbnail, the UI displays a video placeholder.
+ */
 object MediaThumbnailLoader {
-    // Android image/video decoders are native and can be memory intensive on some devices.
-    // Serialize thumbnail work instead of opening several decoders as a gallery list composes.
-    private val decodePermit = Semaphore(1, true)
-
     fun load(
         context: Context,
         media: MediaFile,
         targetWidth: Int = 320,
         targetHeight: Int = 240
     ): Bitmap? {
-        try {
-            decodePermit.acquire()
-        } catch (_: InterruptedException) {
-            Thread.currentThread().interrupt()
-            return null
-        }
+        val request = MediaThumbnailPolicy.boundedSize(targetWidth, targetHeight)
         return try {
-            loadLocked(
-                context,
-                media,
-                targetWidth.coerceIn(1, MAX_THUMBNAIL_EDGE),
-                targetHeight.coerceIn(1, MAX_THUMBNAIL_EDGE)
-            )
-        } catch (_: Exception) {
-            null
-        } finally {
-            decodePermit.release()
-        }
-    }
-
-    private fun loadLocked(
-        context: Context,
-        media: MediaFile,
-        targetWidth: Int,
-        targetHeight: Int
-    ): Bitmap? {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val providerThumbnail = runCatching {
-                context.contentResolver.loadThumbnail(
-                    media.uri,
-                    Size(targetWidth, targetHeight),
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val providerThumbnail = try {
+                    context.contentResolver.loadThumbnail(
+                        media.uri,
+                        Size(request.width, request.height),
+                        null
+                    )
+                } catch (_: OutOfMemoryError) {
+                    return null
+                } catch (_: Exception) {
                     null
-                )
-            }.getOrNull()
-            if (providerThumbnail != null) return providerThumbnail.fitInside(targetWidth, targetHeight)
-        }
-
-        if (media.isVideo) return loadVideoFrame(context, media, targetWidth, targetHeight)
-        if (media.isImage) return loadImage(context, media, targetWidth, targetHeight)
-        return null
-    }
-
-    private fun loadVideoFrame(
-        context: Context,
-        media: MediaFile,
-        targetWidth: Int,
-        targetHeight: Int
-    ): Bitmap? {
-        val retriever = MediaMetadataRetriever()
-        return try {
-            retriever.setDataSource(context, media.uri)
-            val frame = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                retriever.getScaledFrameAtTime(
-                    -1L,
-                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
-                    targetWidth,
-                    targetHeight
-                )
-            } else {
-                val sourceWidth = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()
-                val sourceHeight = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()
-                val pixels = sourceWidth?.toLong()?.times(sourceHeight?.toLong() ?: 0L) ?: 0L
-                if (pixels > MAX_UNSCALED_VIDEO_PIXELS) null
-                else retriever.getFrameAtTime(-1L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                }
+                if (providerThumbnail != null) {
+                    return providerThumbnail.fitInside(request.width, request.height)
+                }
             }
-            frame?.fitInside(targetWidth, targetHeight)
+
+            // Do not invoke a video decoder just to decorate the selection list.
+            if (media.isVideo) return null
+            if (!media.isImage) return null
+
+            loadImage(context, media, request.width, request.height)
+        } catch (_: OutOfMemoryError) {
+            null
         } catch (_: Exception) {
             null
-        } finally {
-            runCatching { retriever.release() }
         }
     }
 
@@ -100,46 +59,47 @@ object MediaThumbnailLoader {
         targetWidth: Int,
         targetHeight: Int
     ): Bitmap? {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                val modernThumbnail = runCatching {
-                    val source = ImageDecoder.createSource(context.contentResolver, media.uri)
-                    ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
-                        val sourceWidth = info.size.width.coerceAtLeast(1)
-                        val sourceHeight = info.size.height.coerceAtLeast(1)
-                        val scale = minOf(
-                            1f,
-                            targetWidth.toFloat() / sourceWidth,
-                            targetHeight.toFloat() / sourceHeight
-                        )
-                        decoder.setTargetSize(
-                            (sourceWidth * scale).roundToInt().coerceAtLeast(1),
-                            (sourceHeight * scale).roundToInt().coerceAtLeast(1)
-                        )
-                    }
-                }.getOrNull()
-                if (modernThumbnail != null) return modernThumbnail.fitInside(targetWidth, targetHeight)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val modernThumbnail = try {
+                val source = ImageDecoder.createSource(context.contentResolver, media.uri)
+                ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                    val sourceWidth = info.size.width.coerceAtLeast(1)
+                    val sourceHeight = info.size.height.coerceAtLeast(1)
+                    val scale = minOf(
+                        1f,
+                        targetWidth.toFloat() / sourceWidth,
+                        targetHeight.toFloat() / sourceHeight
+                    )
+                    decoder.setTargetSize(
+                        (sourceWidth * scale).roundToInt().coerceAtLeast(1),
+                        (sourceHeight * scale).roundToInt().coerceAtLeast(1)
+                    )
+                }
+            } catch (_: OutOfMemoryError) {
+                return null
+            } catch (_: Exception) {
+                null
             }
-
-            // Fall back to BitmapFactory for formats handled by legacy decoders
-            // when ImageDecoder cannot create a preview on this device.
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            context.contentResolver.openInputStream(media.uri)?.use {
-                BitmapFactory.decodeStream(it, null, bounds)
+            if (modernThumbnail != null) {
+                return modernThumbnail.fitInside(targetWidth, targetHeight)
             }
-            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-
-            val options = BitmapFactory.Options().apply {
-                inSampleSize = calculateInSampleSize(bounds, targetWidth, targetHeight)
-                inPreferredConfig = Bitmap.Config.RGB_565
-            }
-            val decoded = context.contentResolver.openInputStream(media.uri)?.use {
-                BitmapFactory.decodeStream(it, null, options)
-            } ?: return null
-            decoded.fitInside(targetWidth, targetHeight)
-        } catch (_: Exception) {
-            null
         }
+
+        // Older Android fallback: inspect dimensions first, then decode a reduced bitmap.
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(media.uri)?.use {
+            BitmapFactory.decodeStream(it, null, bounds)
+        }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = calculateInSampleSize(bounds, targetWidth, targetHeight)
+            inPreferredConfig = Bitmap.Config.RGB_565
+        }
+        val decoded = context.contentResolver.openInputStream(media.uri)?.use {
+            BitmapFactory.decodeStream(it, null, options)
+        } ?: return null
+        return decoded.fitInside(targetWidth, targetHeight)
     }
 
     private fun calculateInSampleSize(
@@ -167,10 +127,23 @@ object MediaThumbnailLoader {
             (height * ratio).toInt().coerceAtLeast(1),
             true
         )
-        if (scaled !== this) recycle()
+        if (scaled !== this && !isRecycled) recycle()
         return scaled
     }
+}
 
-    private const val MAX_THUMBNAIL_EDGE = 1_024
-    private const val MAX_UNSCALED_VIDEO_PIXELS = 12_000_000L
+data class MediaThumbnailSize(val width: Int, val height: Int)
+
+object MediaThumbnailPolicy {
+    fun boundedSize(
+        width: Int,
+        height: Int,
+        maximumEdge: Int = 512
+    ): MediaThumbnailSize {
+        val maximum = maximumEdge.coerceAtLeast(1)
+        return MediaThumbnailSize(
+            width = width.coerceIn(1, maximum),
+            height = height.coerceIn(1, maximum)
+        )
+    }
 }

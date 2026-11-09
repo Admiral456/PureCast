@@ -1,5 +1,12 @@
 # PureCast roadmap
 
+## 0.27.0 — Conservative gallery previews (in progress)
+- Do not invoke MediaMetadataRetriever to generate video frames while browsing the gallery; use Android's provider thumbnail or a neutral video placeholder.
+- Serialize thumbnail generation through a single limited-parallelism dispatcher to avoid opening several native decoders at once.
+- Bound thumbnail dimensions and handle decoder memory exhaustion without terminating media selection.
+- Keep all selected original bytes untouched; preview generation is display-only.
+
+
 ## 0.26.0 — Clear navigation and screen hierarchy (in progress)
 - Replace the single long mixed screen with four bottom-navigation destinations: Connect, Gallery, Queue, and Player.
 - Keep TV discovery and network status together; isolate media selection from playback controls.

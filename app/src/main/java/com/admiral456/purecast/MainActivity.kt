@@ -1973,11 +1973,13 @@ private fun PureCastScreen() {
 
 }
 
+private val mediaThumbnailDispatcher = Dispatchers.IO.limitedParallelism(1)
+
 @Composable
 private fun MediaThumbnail(media: MediaFile) {
     val context = LocalContext.current
     val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = media.uri) {
-        value = withContext(Dispatchers.IO) {
+        value = withContext(mediaThumbnailDispatcher) {
             MediaThumbnailLoader.load(context, media)
         }
     }
