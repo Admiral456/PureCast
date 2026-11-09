@@ -70,10 +70,10 @@ internal class TransferMetrics(
             } else {
                 var bytes = 0L
                 for (sample in recentSamples) bytes += sample.bytes
-                val elapsed = (now - recentSamples.first.timestampNanos)
+                val elapsed = (now - recentSamples.first().timestampNanos)
                     .coerceAtLeast(1L)
                     .coerceAtMost(windowNanos)
-                (bytes * NANOS_PER_SECOND / elapsed).coerceAtLeast(0L)
+                (bytes.toDouble() * NANOS_PER_SECOND.toDouble() / elapsed.toDouble()).toLong().coerceAtLeast(0L)
             }
         }
         return TransferMetricsSnapshot(
@@ -88,7 +88,7 @@ internal class TransferMetrics(
 
     private fun pruneSamples(now: Long) {
         while (recentSamples.isNotEmpty()) {
-            val age = now - recentSamples.first.timestampNanos
+            val age = now - recentSamples.first().timestampNanos
             if (age < windowNanos) break
             recentSamples.removeFirst()
         }
