@@ -76,6 +76,7 @@
 ## Milestone 3 — robust streaming and security
 
 - [x] Prefer Wi-Fi rather than mobile/VPN routes for TV discovery and local playback URLs when available.
+- [x] Retry transient DLNA control-plane network failures with bounded backoff and re-resolve the active Wi-Fi network per attempt.
 - [ ] Add large-file, slow-network and interrupted-transfer stress tests.
 - [ ] Add explicit media server access revocation and token refresh.
 - [x] Revoke a participant token and remove their submitted items when they explicitly leave the group.
