@@ -441,7 +441,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
         }
         val pairingQrPath = "/pair-qr/$token"
         val pairingPanel = if (pairingCode.isNotBlank() && media.isVideo) {
-            """<section class="pairing"><div class="pairing-content"><div class="pairing-code"><span>Jednorázový kód pro PureCast</span><strong>$pairingCode</strong><small>Ručně zadej kód v aplikaci. Platí 5 minut.</small></div><img class="pairing-qr" src="$pairingQrPath" alt="QR kód pro spárování s PureCast"></div><small>Naskenuj QR kód fotoaparátem telefonu. Otevře se aplikace PureCast a televizor se spáruje automaticky.</small></section>"""
+            """<section class="pairing"><div class="pairing-content"><div class="pairing-code"><span>Jednorázový kód pro PureCast</span><strong>$pairingCode</strong><small>Zadej tento kód v aplikaci PureCast v telefonu. QR kód můžeš naskenovat fotoaparátem. Platí 5 minut.</small></div><img class="pairing-qr" src="$pairingQrPath" alt="QR kód pro spárování s PureCast"></div><small>Naskenuj QR kód fotoaparátem telefonu. Otevře se aplikace PureCast a televizor se spáruje automaticky.</small></section>"""
         } else {
             ""
         }
