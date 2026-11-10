@@ -14,12 +14,13 @@ PureCast is an Android application for sending original photos and videos from p
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.19.0
+## Current implementation — 0.20.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes, custom adaptive PureCast launcher icon.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
 - TV brand/platform detection from UPnP manufacturer, model and friendly-name information.
 - SSDP discovery for UPnP/DLNA MediaRenderer devices across common UPnP search targets, preferring the active Wi-Fi route when multiple networks or VPNs are present.
+- Saved TV list stores stable UPnP UDN identifiers and display metadata locally, refreshes names on discovery and restores the previous or first saved TV without persisting stale IP addresses or control URLs.
 - Secure XML parsing and optional UPnP URLBase handling.
 - AVTransport play, pause, resume, stop, seek, playback-state and position queries, with bounded retries for transient Wi-Fi and retryable TV HTTP failures.
 - ConnectionManager GetProtocolInfo parsing with conservative MIME-type compatibility reporting; DLNA SOAP commands use the active Wi-Fi network when available.
