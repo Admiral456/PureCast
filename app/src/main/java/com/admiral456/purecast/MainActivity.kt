@@ -106,6 +106,8 @@ import com.admiral456.purecast.group.GroupQueueSnapshot
 import com.admiral456.purecast.playback.PlaybackQueueLogic
 import com.admiral456.purecast.playback.PureCastPlaybackService
 import com.admiral456.purecast.playback.PureCastRuntime
+import com.admiral456.purecast.server.TvPairingResult
+import com.admiral456.purecast.server.TvRemoteAction
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -206,6 +208,9 @@ private fun PureCastScreen() {
     var playingTitle by remember { mutableStateOf<String?>(null) }
     var playingSharedEntryId by remember { mutableStateOf<String?>(null) }
     var browserUrl by remember { mutableStateOf<String?>(null) }
+    var browserPairingInput by remember { mutableStateOf("") }
+    var browserPairingError by remember { mutableStateOf<String?>(null) }
+    var browserPaired by remember { mutableStateOf(false) }
     var transportInfo by remember { mutableStateOf<DlnaTransportInfo?>(null) }
     var positionInfo by remember { mutableStateOf<DlnaPositionInfo?>(null) }
     var seekPreviewSeconds by remember { mutableStateOf(0f) }
@@ -408,6 +413,9 @@ private fun PureCastScreen() {
                 playingTitle = file.displayName
                 playingSharedEntryId = null
                 browserUrl = PureCastRuntime.getMediaServer(appContext).browserPlayerUrl(streamUrl)
+                browserPairingInput = ""
+                browserPairingError = null
+                browserPaired = false
                 transportInfo = null
                 positionInfo = null
                 seekPreviewSeconds = 0f
@@ -507,6 +515,9 @@ private fun PureCastScreen() {
                     PureCastRuntime.getMediaServer(appContext).publish(file)
                 }
                 browserUrl = PureCastRuntime.getMediaServer(appContext).browserPlayerUrl(streamUrl)
+                browserPairingInput = ""
+                browserPairingError = null
+                browserPaired = false
                 playingDevice = null
                 playingFile = file
                 playingTitle = file.displayName
@@ -519,6 +530,64 @@ private fun PureCastScreen() {
                 status = error.message ?: "Odkaz pro televizi se nepodařilo připravit."
             } finally {
                 busyLabel = null
+            }
+        }
+    }
+
+    fun pairBrowserSession() {
+        val url = browserUrl ?: return
+        if (browserPairingInput.length != 6) {
+            browserPairingError = "Zadej šestimístný kód z obrazovky televizoru."
+            return
+        }
+        scope.launch {
+            browserPairingError = null
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    PureCastRuntime.getMediaServer(appContext).verifyBrowserPairing(url, browserPairingInput)
+                }
+                when (result) {
+                    TvPairingResult.PAIRED, TvPairingResult.ALREADY_PAIRED -> {
+                        browserPaired = true
+                        browserPairingError = null
+                        status = "Televizní prohlížeč je spárovaný. Můžeš ho ovládat z telefonu."
+                    }
+                    TvPairingResult.INVALID_CODE ->
+                        browserPairingError = "Kód nesouhlasí. Zkontroluj číslice na televizoru."
+                    TvPairingResult.EXPIRED ->
+                        browserPairingError = "Kód vypršel. Znovu odešli video do televizoru a použij nový kód."
+                    TvPairingResult.LOCKED ->
+                        browserPairingError = "Příliš mnoho chybných pokusů. Vytvoř nový odkaz pro televizor."
+                    TvPairingResult.NOT_FOUND ->
+                        browserPairingError = "Párovací relace už není dostupná. Vytvoř nový odkaz."
+                }
+            } catch (error: Exception) {
+                browserPairingError = error.message ?: "Párování televizoru se nezdařilo."
+            }
+        }
+    }
+
+    fun sendBrowserCommand(action: TvRemoteAction, positionSeconds: Long? = null) {
+        val url = browserUrl ?: return
+        scope.launch {
+            try {
+                val accepted = withContext(Dispatchers.IO) {
+                    PureCastRuntime.getMediaServer(appContext).queueBrowserCommand(url, action, positionSeconds)
+                }
+                if (!accepted) {
+                    browserPaired = false
+                    browserPairingError = "Televizor už není spárovaný nebo je mimo síť."
+                    status = "Ovládání TV není dostupné. Znovu spáruj televizní prohlížeč."
+                } else {
+                    status = when (action) {
+                        TvRemoteAction.PLAY -> "Odeslán příkaz Přehrát."
+                        TvRemoteAction.PAUSE -> "Odeslán příkaz Pozastavit."
+                        TvRemoteAction.STOP -> "Odeslán příkaz Zastavit."
+                        TvRemoteAction.SEEK -> "Odeslán příkaz pro posun videa."
+                    }
+                }
+            } catch (error: Exception) {
+                browserPairingError = error.message ?: "Příkaz se nepodařilo odeslat."
             }
         }
     }
@@ -1586,10 +1655,10 @@ private fun PureCastScreen() {
                             }
                         }
                         browserUrl?.let { url ->
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("Záložní režim přes prohlížeč TV", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Připojení televizoru", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                                 Text(
-                                    "Pokud DLNA ovládání televize nefunguje, otevři na televizi webový prohlížeč a zadej tuto adresu:",
+                                    "Otevři odkaz v prohlížeči televizoru. U videa se na TV zobrazí jednorázový šestimístný kód.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -1602,6 +1671,52 @@ private fun PureCastScreen() {
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 ) { Text("Zkopírovat adresu přehrávače") }
+                                if (playingFile?.isVideo == true) {
+                                    if (!browserPaired) {
+                                        OutlinedTextField(
+                                            value = browserPairingInput,
+                                            onValueChange = { value ->
+                                                browserPairingInput = value.filter(Char::isDigit).take(6)
+                                                browserPairingError = null
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            singleLine = true,
+                                            label = { Text("Kód z televizoru") },
+                                            placeholder = { Text("000000") },
+                                            supportingText = {
+                                                Text(browserPairingError ?: "Kód je jednorázový a platí 5 minut.")
+                                            },
+                                            isError = browserPairingError != null
+                                        )
+                                        Button(
+                                            onClick = { pairBrowserSession() },
+                                            enabled = browserPairingInput.length == 6,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) { Text("Spárovat televizor") }
+                                    } else {
+                                        StatusMessage("Televizor je spárovaný a připojený přes Wi-Fi.", error = false)
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                            OutlinedButton(
+                                                onClick = { sendBrowserCommand(TvRemoteAction.PLAY) },
+                                                modifier = Modifier.weight(1f)
+                                            ) { Text("Přehrát") }
+                                            OutlinedButton(
+                                                onClick = { sendBrowserCommand(TvRemoteAction.PAUSE) },
+                                                modifier = Modifier.weight(1f)
+                                            ) { Text("Pauza") }
+                                            OutlinedButton(
+                                                onClick = { sendBrowserCommand(TvRemoteAction.STOP) },
+                                                modifier = Modifier.weight(1f)
+                                            ) { Text("Stop") }
+                                        }
+                                        Text(
+                                            "Ovládání funguje, když je TV prohlížeč otevřený a obě zařízení jsou ve stejné Wi-Fi síti.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    browserPairingError?.let { StatusMessage(it, error = true) }
+                                }
                             }
                         }
                     }
