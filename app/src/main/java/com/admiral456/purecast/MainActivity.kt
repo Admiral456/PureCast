@@ -1168,6 +1168,7 @@ private fun PureCastScreen() {
                     }
                 }
             }
+        }
 
         if (selectedTab == PureCastTab.PLAYBACK && playbackQueue.isNotEmpty()) {
             item {
