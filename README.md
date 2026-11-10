@@ -14,7 +14,7 @@ PureCast is an Android application for sending original photos and videos from p
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.18.0
+## Current implementation — 0.19.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes, custom adaptive PureCast launcher icon.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
@@ -25,7 +25,8 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - ConnectionManager GetProtocolInfo parsing with conservative MIME-type compatibility reporting; DLNA SOAP commands use the active Wi-Fi network when available.
 - Local HTTP streaming of the original selected URI with byte-range support, Wi-Fi-interface binding, bounded client concurrency, validated MIME response headers and active-connection cleanup.
 - TV browser fallback page with responsive playback UI, video MIME hints and actual image load/error feedback including decoded dimensions. Video playback automatically retries transient browser network errors up to three times and attempts to restore the previous play position without transcoding.
-- TV-browser pairing uses a one-time six-digit code displayed on the TV, with a five-minute expiry and a five-attempt lockout. After pairing, the phone can remotely play, pause and stop the browser video over the same local Wi-Fi connection.
+- TV-browser pairing supports both manual six-digit entry and a TV-displayed QR code. Scanning the QR with the phone camera opens the PureCast app through a validated deep link and pairs automatically; codes expire after five minutes and lock after five failed attempts.
+- After pairing, the phone can remotely play, pause and stop the browser video over the same local Wi-Fi connection.
 - Foreground media-playback service to keep streaming active when the app is backgrounded or the display turns off.
 - Android Photo Picker plus a multi-select Android document picker for image/video files and less common formats, with persistent URI permission where supported. Non-media documents are skipped and cannot be sent to the TV or added to playback queues.
 - Optional full gallery access using Android runtime permissions, requested only after the user taps the gallery access control.
