@@ -36,18 +36,32 @@ data class MediaFile(
             var name = uri.lastPathSegment?.substringAfterLast('/') ?: "media"
             var size: Long? = null
 
-            resolver.query(
-                uri,
-                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
-                null,
-                null,
-                null
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                    if (nameIndex >= 0) name = cursor.getString(nameIndex) ?: name
-                    if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) size = cursor.getLong(sizeIndex)
+            val basicCursor = runCatching {
+                resolver.query(
+                    uri,
+                    arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                    null,
+                    null,
+                    null
+                )
+            }.getOrNull() ?: runCatching {
+                // Some document providers reject SIZE in the projection but still expose a name.
+                resolver.query(
+                    uri,
+                    arrayOf(OpenableColumns.DISPLAY_NAME),
+                    null,
+                    null,
+                    null
+                )
+            }.getOrNull()
+            runCatching {
+                basicCursor?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                        if (nameIndex >= 0) name = cursor.getString(nameIndex) ?: name
+                        if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) size = cursor.getLong(sizeIndex)
+                    }
                 }
             }
 
@@ -68,24 +82,28 @@ data class MediaFile(
                     null
                 )
             }.getOrNull()
-            metadataCursor?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val modifiedIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DATE_MODIFIED)
-                    if (modifiedIndex >= 0 && !cursor.isNull(modifiedIndex)) {
-                        val modifiedSeconds = cursor.getLong(modifiedIndex)
-                        if (modifiedSeconds > 0) {
-                            dateModifiedMillis = modifiedSeconds * 1_000L
+            runCatching {
+                metadataCursor?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val modifiedIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DATE_MODIFIED)
+                        if (modifiedIndex >= 0 && !cursor.isNull(modifiedIndex)) {
+                            val modifiedSeconds = cursor.getLong(modifiedIndex)
+                            if (modifiedSeconds > 0) {
+                                dateModifiedMillis = modifiedSeconds * 1_000L
+                            }
                         }
-                    }
-                    val albumIndex = cursor.getColumnIndex(MediaStore.Images.ImageColumns.BUCKET_DISPLAY_NAME)
-                    if (albumIndex >= 0 && !cursor.isNull(albumIndex)) {
-                        albumName = cursor.getString(albumIndex)?.trim()?.takeIf { it.isNotEmpty() }
+                        val albumIndex = cursor.getColumnIndex(MediaStore.Images.ImageColumns.BUCKET_DISPLAY_NAME)
+                        if (albumIndex >= 0 && !cursor.isNull(albumIndex)) {
+                            albumName = cursor.getString(albumIndex)?.trim()?.takeIf { it.isNotEmpty() }
+                        }
                     }
                 }
             }
 
             val extension = name.substringAfterLast('.', "").lowercase()
-            val providerMime = resolver.getType(uri)?.substringBefore(';')?.trim()?.lowercase()
+            val providerMime = runCatching {
+                resolver.getType(uri)?.substringBefore(';')?.trim()?.lowercase()
+            }.getOrNull()
             val mimeFromExtension = ImageFormatCatalog.mimeTypeForExtension(extension)
                 ?: knownMimeTypes[extension]
                 ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
