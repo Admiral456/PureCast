@@ -1666,7 +1666,7 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("Připojení televizoru", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                                 Text(
-                                    "Otevři odkaz v prohlížeči televizoru. U videa se na TV zobrazí jednorázový šestimístný kód.",
+                                    "Otevři odkaz v prohlížeči televize. U videa můžeš naskenovat QR kód fotoaparátem telefonu nebo ručně zadat jednorázový kód.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
