@@ -24,7 +24,17 @@ data class MediaTechnicalInfo(
 }
 
 object MediaInspector {
-    fun inspect(context: Context, media: MediaFile): MediaTechnicalInfo? {
+    fun inspect(context: Context, media: MediaFile): MediaTechnicalInfo? =
+        try {
+            inspectInternal(context, media)
+        } catch (_: OutOfMemoryError) {
+            // Metadata is supplementary. Keep the selected original media usable without it.
+            null
+        } catch (_: Exception) {
+            null
+        }
+
+    private fun inspectInternal(context: Context, media: MediaFile): MediaTechnicalInfo? {
         if (media.isImage) return inspectImage(context, media)
         if (!media.isVideo) return null
 
