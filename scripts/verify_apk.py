@@ -24,7 +24,7 @@ REQUIRED_DEX_STRINGS = (
     "Uložit televizor",
     "Uložený televizor",
     "Teď nenalezen – zkus znovu vyhledat",
-    "stable UPnP identifikátor",
+    "neposkytuje stabilní ID",
     "Sdílená fronta",
     "Předchozí",
     "Další",
