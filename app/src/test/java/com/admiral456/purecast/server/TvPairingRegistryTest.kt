@@ -35,19 +35,20 @@ class TvPairingRegistryTest {
     @Test
     fun incorrectCodesAreLockedAfterFiveAttempts() {
         val registry = TvPairingRegistry()
-        registry.create("media-token-03", nowMillis = 0L)
+        val ticket = registry.create("media-token-03", nowMillis = 0L)
+        val wrongCode = if (ticket.code == "000000") "000001" else "000000"
 
         repeat(TvPairingRegistry.MAX_FAILED_ATTEMPTS - 1) {
             assertEquals(
                 TvPairingResult.INVALID_CODE,
-                registry.verify("media-token-03", "999999", it.toLong())
+                registry.verify("media-token-03", wrongCode, it.toLong())
             )
         }
         assertEquals(
             TvPairingResult.LOCKED,
-            registry.verify("media-token-03", "999999", 10L)
+            registry.verify("media-token-03", wrongCode, 10L)
         )
-        assertEquals(TvPairingResult.LOCKED, registry.verify("media-token-03", "000000", 11L))
+        assertEquals(TvPairingResult.LOCKED, registry.verify("media-token-03", ticket.code, 11L))
     }
 
     @Test
@@ -69,8 +70,8 @@ class TvPairingRegistryTest {
 
         assertFalse(registry.enqueue("media-token-05", TvRemoteAction.PAUSE))
         assertEquals(TvPairingResult.PAIRED, registry.verify("media-token-05", ticket.code, 1L))
-        assertTrue(registry.enqueue("media-token-05", TvRemoteAction.PLAY))
-        assertTrue(registry.enqueue("media-token-05", TvRemoteAction.SEEK, 42L))
+        assertTrue(registry.enqueue("media-token-05", TvRemoteAction.PLAY, nowMillis = 2L))
+        assertTrue(registry.enqueue("media-token-05", TvRemoteAction.SEEK, 42L, nowMillis = 3L))
         assertEquals(
             listOf(
                 TvRemoteCommand(TvRemoteAction.PLAY),
@@ -87,7 +88,7 @@ class TvPairingRegistryTest {
         val ticket = registry.create("media-token-06", nowMillis = 0L)
         registry.verify("media-token-06", ticket.code, 1L)
 
-        assertFalse(registry.enqueue("media-token-06", TvRemoteAction.SEEK))
-        assertFalse(registry.enqueue("media-token-06", TvRemoteAction.SEEK, -1L))
+        assertFalse(registry.enqueue("media-token-06", TvRemoteAction.SEEK, nowMillis = 2L))
+        assertFalse(registry.enqueue("media-token-06", TvRemoteAction.SEEK, -1L, nowMillis = 2L))
     }
 }
