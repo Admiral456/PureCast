@@ -8,8 +8,25 @@ import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.util.Size
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 
 object MediaThumbnailLoader {
+    // Only two native thumbnail decoders may allocate bitmaps at the same time.
+    private val decodeSemaphore = Semaphore(2)
+
+    suspend fun loadLimited(
+        context: Context,
+        media: MediaFile,
+        targetWidth: Int = DEFAULT_THUMBNAIL_WIDTH,
+        targetHeight: Int = DEFAULT_THUMBNAIL_HEIGHT
+    ): Bitmap? = decodeSemaphore.withPermit {
+        withContext(Dispatchers.IO) {
+            load(context, media, targetWidth, targetHeight)
+        }
+    }
     fun load(
         context: Context,
         media: MediaFile,
