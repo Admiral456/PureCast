@@ -1934,9 +1934,9 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
 private fun MediaThumbnail(media: MediaFile) {
     val context = LocalContext.current
     val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = media.uri) {
-        value = withContext(Dispatchers.IO) {
-            runCatching { MediaThumbnailLoader.load(context, media) }.getOrNull()
-        }
+        value = runCatching {
+            MediaThumbnailLoader.loadLimited(context, media)
+        }.getOrNull()
     }
     DisposableEffect(bitmap) {
         onDispose {
