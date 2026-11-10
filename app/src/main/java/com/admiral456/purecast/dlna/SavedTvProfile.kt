@@ -28,7 +28,7 @@ object SavedTvProfileCodec {
         return encoded.lineSequence()
             .take(SavedTvLogic.MAX_SAVED_TVS)
             .mapNotNull { line ->
-                val fields = line.split('\t')
+                val fields = line.split('\t', limit = 4)
                 if (fields.size != 4) return@mapNotNull null
                 val decoded = fields.map { field ->
                     runCatching {
