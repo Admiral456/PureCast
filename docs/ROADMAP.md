@@ -40,6 +40,8 @@
 - [x] Normalize MIME types and DLNA protocolInfo parameters before compatibility checks.
 - [x] Add actual image load/error feedback and decoded dimensions to the TV-browser player.
 - [x] Skip non-image and non-video documents from the document picker.
+- [x] Apply the media library limit before querying provider metadata and deduplicate selected document URIs before opening them.
+- [x] Bound legacy video-frame thumbnails and keep preview/metadata allocation failures from interrupting media selection.
 - [x] Route DLNA SOAP commands and shared-queue client requests over the active Wi-Fi network when available.
 - [x] Fail clearly if the SSDP multicast socket cannot bind to the selected Wi-Fi network.
 - [x] Limit UPnP device descriptions, SOAP replies and shared-queue JSON replies to 1 MiB before parsing.
