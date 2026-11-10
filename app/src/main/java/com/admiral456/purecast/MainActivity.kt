@@ -109,6 +109,7 @@ import com.admiral456.purecast.playback.PureCastRuntime
 import com.admiral456.purecast.server.TvPairingResult
 import com.admiral456.purecast.server.TvRemoteAction
 import com.admiral456.purecast.server.TvPairingDeepLink
+import com.admiral456.purecast.server.TvPairingLaunch
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -146,15 +147,24 @@ private val PureCastDark = darkColorScheme(
 )
 
 class MainActivity : ComponentActivity() {
+    private var pairingLaunch by mutableStateOf<TvPairingLaunch?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pairingLaunch = TvPairingDeepLink.parse(intent?.dataString)
         setContent {
             MaterialTheme(colorScheme = if (isSystemInDarkTheme()) PureCastDark else PureCastLight) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    PureCastScreen(TvPairingDeepLink.parse(intent?.dataString))
+                    PureCastScreen(pairingLaunch)
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pairingLaunch = TvPairingDeepLink.parse(intent.dataString)
     }
 }
 
@@ -570,6 +580,12 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
 
     LaunchedEffect(initialPairing) {
         if (initialPairing != null) {
+            selectedTab = PureCastTab.PLAYBACK
+            browserUrl = initialPairing.browserUrl
+            browserPairingInput = initialPairing.code
+            browserPairingError = null
+            browserPaired = false
+            playingTitle = "TV prohlížeč – vzdálené ovládání"
             status = "QR kód načten. Ověřuji jednorázové párování televizoru…"
             pairBrowserSession()
         }
