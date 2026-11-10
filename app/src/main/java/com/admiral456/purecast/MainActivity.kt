@@ -84,7 +84,6 @@ import com.admiral456.purecast.dlna.DlnaCompatibility
 import com.admiral456.purecast.dlna.MediaCompatibility
 import com.admiral456.purecast.dlna.DlnaDevice
 import com.admiral456.purecast.dlna.SavedTvLogic
-import com.admiral456.purecast.dlna.SavedTvProfile
 import com.admiral456.purecast.dlna.SavedTvStore
 import com.admiral456.purecast.dlna.DlnaDiscovery
 import com.admiral456.purecast.dlna.DlnaTransportInfo
