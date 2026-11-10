@@ -410,7 +410,11 @@ class LocalMediaServer(private val context: Context) : Closeable {
                         const response = await fetch(controlUrl, { cache: 'no-store' });
                         if (response.ok) {
                           const payload = await response.json();
-                          if (payload.paired && Array.isArray(payload.commands)) payload.commands.forEach(applyCommand);
+                          if (payload.paired) {
+                            const pairingPanel = document.querySelector('.pairing');
+                            if (pairingPanel) pairingPanel.innerHTML = '<span>Televizor je spárovaný s telefonem.</span>';
+                            if (Array.isArray(payload.commands)) payload.commands.forEach(applyCommand);
+                          }
                         }
                       } catch (_) {
                         // A temporary lost poll must not interrupt direct media playback.
