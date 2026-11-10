@@ -59,13 +59,15 @@ fun MediaGalleryTile(
     val context = LocalContext.current
     val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = file.uri) {
         value = withContext(Dispatchers.IO) {
-            MediaThumbnailLoader.load(context, file)
+            runCatching { MediaThumbnailLoader.load(context, file) }.getOrNull()
         }
     }
     DisposableEffect(bitmap) {
         onDispose {
             bitmap?.let { thumbnail ->
-                if (!thumbnail.isRecycled) thumbnail.recycle()
+                runCatching {
+                    if (!thumbnail.isRecycled) thumbnail.recycle()
+                }
             }
         }
     }
