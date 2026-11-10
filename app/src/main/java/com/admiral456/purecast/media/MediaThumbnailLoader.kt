@@ -38,13 +38,17 @@ object MediaThumbnailLoader {
         targetHeight: Int
     ): Bitmap? {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val providerThumbnail = runCatching {
+            val providerThumbnail = try {
                 context.contentResolver.loadThumbnail(
                     media.uri,
                     Size(targetWidth, targetHeight),
                     null
                 )
-            }.getOrNull()
+            } catch (_: OutOfMemoryError) {
+                return null
+            } catch (_: Exception) {
+                null
+            }
             if (providerThumbnail != null) {
                 try {
                     return providerThumbnail.fitInside(targetWidth, targetHeight)
@@ -111,7 +115,7 @@ object MediaThumbnailLoader {
     ): Bitmap? {
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                val modernThumbnail = runCatching {
+                val modernThumbnail = try {
                     val source = ImageDecoder.createSource(context.contentResolver, media.uri)
                     ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
                         val sourceWidth = info.size.width.coerceAtLeast(1)
@@ -128,7 +132,11 @@ object MediaThumbnailLoader {
                             (sourceHeight * scale).roundToInt().coerceAtLeast(1)
                         )
                     }
-                }.getOrNull()
+                } catch (_: OutOfMemoryError) {
+                    return null
+                } catch (_: Exception) {
+                    null
+                }
                 if (modernThumbnail != null) return modernThumbnail.fitInside(targetWidth, targetHeight)
             }
 
