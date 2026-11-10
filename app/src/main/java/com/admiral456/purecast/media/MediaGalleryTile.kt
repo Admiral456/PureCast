@@ -35,8 +35,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 @Composable
 fun MediaGalleryTile(
@@ -58,9 +56,9 @@ fun MediaGalleryTile(
 ) {
     val context = LocalContext.current
     val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = file.uri) {
-        value = withContext(Dispatchers.IO) {
-            runCatching { MediaThumbnailLoader.load(context, file) }.getOrNull()
-        }
+        value = runCatching {
+            MediaThumbnailLoader.loadLimited(context, file)
+        }.getOrNull()
     }
     DisposableEffect(bitmap) {
         onDispose {
