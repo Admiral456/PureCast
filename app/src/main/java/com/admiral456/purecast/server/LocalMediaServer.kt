@@ -566,7 +566,13 @@ class LocalMediaServer(private val context: Context) : Closeable {
 
     private fun pruneExpiredTokens() {
         val now = System.currentTimeMillis()
-        mediaByToken.entries.removeAll { it.value.expiresAtMillis < now }
+        val expiredTokens = mediaByToken.entries
+            .filter { it.value.expiresAtMillis < now }
+            .map { it.key }
+        expiredTokens.forEach { token ->
+            mediaByToken.remove(token)
+            tvPairingRegistry.remove(token)
+        }
     }
 
     private fun findLocalIpv4(): Inet4Address? {
