@@ -5,6 +5,8 @@ import android.net.ConnectivityManager
 import android.net.Uri
 import com.admiral456.purecast.media.MediaFile
 import com.admiral456.purecast.network.WifiNetworkResolver
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
 import java.io.Closeable
@@ -30,6 +32,7 @@ private data class PublishedMedia(
 
 class LocalMediaServer(private val context: Context) : Closeable {
     private val mediaByToken = ConcurrentHashMap<String, PublishedMedia>()
+    private val tvPairingRegistry = TvPairingRegistry()
     private val clientSockets = ConcurrentHashMap.newKeySet<Socket>()
     private val clientExecutor: ExecutorService = ThreadPoolExecutor(
         MIN_CLIENT_THREADS,
@@ -53,6 +56,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
         val server = ensureServer(address)
         val token = MediaTokenGenerator.create()
         mediaByToken[token] = PublishedMedia(media, System.currentTimeMillis() + TOKEN_LIFETIME_MS)
+        tvPairingRegistry.create(token)
         pruneExpiredTokens()
         return "http://" + address.hostAddress + ":" + server.localPort + "/media/" + token
     }
@@ -63,6 +67,23 @@ class LocalMediaServer(private val context: Context) : Closeable {
         return parsed.buildUpon().path("/tv/$token").build().toString()
     }
 
+    fun verifyBrowserPairing(browserUrl: String, code: String): TvPairingResult {
+        val token = tokenFromUrl(browserUrl) ?: return TvPairingResult.NOT_FOUND
+        return tvPairingRegistry.verify(token, code)
+    }
+
+    fun queueBrowserCommand(
+        browserUrl: String,
+        action: TvRemoteAction,
+        positionSeconds: Long? = null
+    ): Boolean {
+        val token = tokenFromUrl(browserUrl) ?: return false
+        return tvPairingRegistry.enqueue(token, action, positionSeconds)
+    }
+
+    private fun tokenFromUrl(value: String): String? =
+        Uri.parse(value).lastPathSegment?.takeIf { it.matches(TOKEN_PATTERN) }
+
     @Synchronized
     private fun ensureServer(address: Inet4Address): ServerSocket {
         serverSocket?.takeIf { !it.isClosed && boundAddress == address }?.let { return it }
@@ -71,6 +92,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
         } catch (_: Exception) {
         }
         if (boundAddress != null && boundAddress != address) {
+            tvPairingRegistry.clear()
             clientSockets.forEach { client ->
                 try {
                     client.close()
@@ -167,12 +189,22 @@ class LocalMediaServer(private val context: Context) : Closeable {
             val published = mediaByToken[token]
             if (published == null || published.expiresAtMillis < System.currentTimeMillis()) {
                 mediaByToken.remove(token)
+                tvPairingRegistry.remove(token)
                 writeSimpleResponse(client, 404, "Media Link Expired")
                 return
             }
 
             if (route == "tv") {
-                writeBrowserPlayer(client, method, token, published.media)
+                val ticket = tvPairingRegistry.ticket(token)
+                writeBrowserPlayer(client, method, token, published.media, ticket?.code.orEmpty())
+                return
+            }
+            if (route == "control") {
+                if (method != "GET") {
+                    writeSimpleResponse(client, 405, "Method Not Allowed")
+                    return
+                }
+                writeBrowserCommands(client, token)
                 return
             }
 
@@ -253,10 +285,11 @@ class LocalMediaServer(private val context: Context) : Closeable {
         }
     }
 
-    private fun writeBrowserPlayer(socket: Socket, method: String, token: String, media: MediaFile) {
+    private fun writeBrowserPlayer(socket: Socket, method: String, token: String, media: MediaFile, pairingCode: String) {
         val escapedName = htmlEscape(media.displayName)
         val safeMime = htmlEscape(safeContentType(media.mimeType))
         val mediaPath = "/media/$token"
+        val controlPath = "/control/$token"
         val content = if (media.isImage) {
             "<img id=\"picture\" data-mime=\"$safeMime\" src=\"$mediaPath\" alt=\"$escapedName\">"
         } else if (media.isVideo) {
@@ -306,6 +339,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
                     const result = document.getElementById('compatibility');
                     if (!player || !result) return;
                     const mime = player.querySelector('source')?.type || '';
+                    const controlUrl = '$controlPath';
                     const support = player.canPlayType(mime);
                     const retryDelays = [$retryDelays];
                     const maxRetries = ${BrowserPlaybackRecoveryPolicy.MAX_RETRIES};
@@ -359,11 +393,42 @@ class LocalMediaServer(private val context: Context) : Closeable {
                           player.videoWidth + ' × ' + player.videoHeight + '. Zdroj zůstává originální.';
                       }
                     });
+                    const applyCommand = command => {
+                      switch (command.action) {
+                        case 'play': player.play().catch(() => {}); break;
+                        case 'pause': player.pause(); break;
+                        case 'stop': player.pause(); try { player.currentTime = 0; } catch (_) {} break;
+                        case 'seek':
+                          if (Number.isFinite(command.positionSeconds) && Number.isFinite(player.duration)) {
+                            try { player.currentTime = Math.max(0, Math.min(command.positionSeconds, player.duration)); } catch (_) {}
+                          }
+                          break;
+                      }
+                    };
+                    const pollRemoteCommands = async () => {
+                      try {
+                        const response = await fetch(controlUrl, { cache: 'no-store' });
+                        if (response.ok) {
+                          const payload = await response.json();
+                          if (payload.paired && Array.isArray(payload.commands)) payload.commands.forEach(applyCommand);
+                        }
+                      } catch (_) {
+                        // A temporary lost poll must not interrupt direct media playback.
+                      } finally {
+                        window.setTimeout(pollRemoteCommands, 900);
+                      }
+                    };
+                    window.setTimeout(pollRemoteCommands, 900);
                   })();
                 </script>
                 """.trimIndent()
             }
             else -> ""
+        }
+        val pairingPanel = if (pairingCode.isNotBlank() && media.isVideo) {
+            """<section class="pairing"><span>Jednorázový kód pro PureCast</span><strong>$pairingCode</strong><small>Zadej tento kód v aplikaci PureCast v telefonu. Platí 5 minut.</small></section>"""
+        } else {
+            ""
         }
         val compatibilityPanel = if (media.isImage || media.isVideo) {
             "<p id=\"compatibility\" class=\"compatibility\">Ověřuji zobrazení originálního souboru v televizoru…</p>"
@@ -391,6 +456,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
                 img{max-width:100%;max-height:72vh;object-fit:contain}
                 video{width:100%;height:auto;max-height:75vh;object-fit:contain;background:#000}
                 .compatibility{width:100%;margin:0;padding:12px 15px;border:1px solid #293248;border-radius:12px;color:#bdc9e0;font-size:13px;line-height:1.5;background:#121a2a}
+                .pairing{width:100%;display:flex;flex-direction:column;align-items:center;gap:5px;padding:14px;border:1px solid #4059d6;border-radius:14px;background:#121a2a;text-align:center}.pairing span{font-size:12px;color:#bdc9e0}.pairing strong{font-size:36px;letter-spacing:9px;color:#fff;font-variant-numeric:tabular-nums}.pairing small{font-size:11px;line-height:1.4;color:#9eabc5}
                 .quality{font-size:12px;color:#8592ac;text-align:center}
                 a{color:#aebeff}
               </style>
@@ -403,6 +469,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
               <main>
                 <div class="frame">$content</div>
                 $compatibilityPanel
+                $pairingPanel
                 <div class="quality">Bez cloudu · Bez překódování · Původní soubor</div>
               </main>
               $script
@@ -419,6 +486,33 @@ class LocalMediaServer(private val context: Context) : Closeable {
                 "Connection: close\r\n\r\n").toByteArray(Charsets.US_ASCII)
         )
         if (method != "HEAD") output.write(html)
+        output.flush()
+    }
+
+    private fun writeBrowserCommands(socket: Socket, token: String) {
+        val paired = tvPairingRegistry.isPaired(token)
+        val commands = if (paired) tvPairingRegistry.drain(token) else emptyList()
+        val payload = JSONObject()
+            .put("paired", paired)
+            .put("commands", JSONArray().apply {
+                commands.forEach { command ->
+                    put(JSONObject()
+                        .put("action", command.action.wireValue)
+                        .put("positionSeconds", command.positionSeconds ?: JSONObject.NULL))
+                }
+            })
+            .toString()
+            .toByteArray(Charsets.UTF_8)
+        val output = BufferedOutputStream(socket.getOutputStream())
+        output.write(
+            ("HTTP/1.1 200 OK\r\n" +
+                "Content-Type: application/json; charset=utf-8\r\n" +
+                "Content-Length: ${payload.size}\r\n" +
+                "Cache-Control: no-store\r\n" +
+                "X-Content-Type-Options: nosniff\r\n" +
+                "Connection: close\r\n\r\n").toByteArray(Charsets.US_ASCII)
+        )
+        output.write(payload)
         output.flush()
     }
 
@@ -523,6 +617,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
         acceptThread = null
         boundAddress = null
         mediaByToken.clear()
+        tvPairingRegistry.clear()
         clientSockets.forEach { client ->
             try {
                 client.close()
@@ -541,6 +636,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
         private const val MAX_QUEUED_CLIENTS = 32
         private const val CLIENT_KEEP_ALIVE_SECONDS = 30L
         private const val TOKEN_LIFETIME_MS = 6 * 60 * 60 * 1_000L
-        private val MEDIA_PATH = Regex("^/(media|tv)/([A-Za-z0-9_-]{12})$")
+        private val TOKEN_PATTERN = Regex("^[A-Za-z0-9_-]{12}$")
+        private val MEDIA_PATH = Regex("^/(media|tv|control)/([A-Za-z0-9_-]{12})$")
     }
 }
