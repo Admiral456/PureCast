@@ -297,6 +297,8 @@ class LocalMediaServer(private val context: Context) : Closeable {
                 """.trimIndent()
             }
             media.isVideo -> {
+                val retryDelays = (1..BrowserPlaybackRecoveryPolicy.MAX_RETRIES)
+                    .joinToString(",") { BrowserPlaybackRecoveryPolicy.delayMillis(it).toString() }
                 """
                 <script>
                   (() => {
@@ -305,17 +307,56 @@ class LocalMediaServer(private val context: Context) : Closeable {
                     if (!player || !result) return;
                     const mime = player.querySelector('source')?.type || '';
                     const support = player.canPlayType(mime);
+                    const retryDelays = [$retryDelays];
+                    const maxRetries = ${BrowserPlaybackRecoveryPolicy.MAX_RETRIES};
+                    let retryCount = 0;
+                    let retryPending = false;
                     result.textContent = support === 'probably'
                       ? 'Prohlížeč pravděpodobně podporuje typ ' + mime + '. Konkrétní kodek a HDR se ověřují až při přehrávání.'
                       : support === 'maybe'
                         ? 'Prohlížeč uvádí možnou podporu ' + mime + '. Přesná kompatibilita není zaručena.'
                         : 'Prohlížeč nepotvrdil podporu ' + mime + '. PureCast soubor nepřevádí.';
+                    player.addEventListener('waiting', () => {
+                      result.textContent = 'Čekám na další data z telefonu. Původní soubor se nepřevádí.';
+                    });
                     player.addEventListener('error', () => {
-                      result.textContent = 'Přehrávání selhalo. Televizor pravděpodobně nepodporuje tento formát nebo kodek.';
+                      const networkFailure = player.error?.code === 2;
+                      if (networkFailure && retryCount < maxRetries && !retryPending) {
+                        const retryIndex = retryCount;
+                        retryCount += 1;
+                        retryPending = true;
+                        const resumeAt = Number.isFinite(player.currentTime) ? player.currentTime : 0;
+                        const shouldResume = !player.paused;
+                        result.textContent = 'Síťové spojení se přerušilo. Obnovuji přehrávání (' +
+                          retryCount + '/' + maxRetries + ')…';
+                        window.setTimeout(() => {
+                          player.addEventListener('loadedmetadata', () => {
+                            if (resumeAt > 0 && Number.isFinite(player.duration)) {
+                              try {
+                                player.currentTime = Math.min(resumeAt, player.duration);
+                              } catch (_) {
+                                // Some TV browser engines do not allow seeking immediately.
+                              }
+                            }
+                            if (shouldResume) player.play().catch(() => {});
+                          }, { once: true });
+                          retryPending = false;
+                          player.load();
+                        }, retryDelays[retryIndex]);
+                        return;
+                      }
+                      result.textContent = networkFailure
+                        ? 'Přehrávání se nepodařilo obnovit po několika pokusech. Zkontroluj Wi-Fi telefonu a znovu odešli soubor do televize.'
+                        : 'Přehrávání selhalo. Televizor pravděpodobně nepodporuje tento formát nebo kodek. PureCast kvalitu nesnižuje.';
+                    });
+                    player.addEventListener('playing', () => {
+                      retryCount = 0;
+                      retryPending = false;
                     });
                     player.addEventListener('loadedmetadata', () => {
                       if (player.videoWidth && player.videoHeight) {
-                        result.textContent += ' Zjištěné rozlišení: ' + player.videoWidth + ' × ' + player.videoHeight + '.';
+                        result.textContent = 'Přehrávač načetl video. Rozlišení: ' +
+                          player.videoWidth + ' × ' + player.videoHeight + '. Zdroj zůstává originální.';
                       }
                     });
                   })();
