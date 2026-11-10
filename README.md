@@ -14,7 +14,7 @@ PureCast is an Android application for sending original photos and videos from p
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.16.0
+## Current implementation — 0.17.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes, custom adaptive PureCast launcher icon.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
@@ -24,7 +24,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - AVTransport play, pause, resume, stop, seek, playback-state and position queries, with bounded retries for transient Wi-Fi and retryable TV HTTP failures.
 - ConnectionManager GetProtocolInfo parsing with conservative MIME-type compatibility reporting; DLNA SOAP commands use the active Wi-Fi network when available.
 - Local HTTP streaming of the original selected URI with byte-range support, Wi-Fi-interface binding, bounded client concurrency, validated MIME response headers and active-connection cleanup.
-- TV browser fallback page with responsive playback UI, video MIME hints and actual image load/error feedback including decoded dimensions. The image element and its MIME feedback are checked in the packaged APK.
+- TV browser fallback page with responsive playback UI, video MIME hints and actual image load/error feedback including decoded dimensions. Video playback automatically retries transient browser network errors up to three times and attempts to restore the previous play position without transcoding.
 - Foreground media-playback service to keep streaming active when the app is backgrounded or the display turns off.
 - Android Photo Picker plus a multi-select Android document picker for image/video files and less common formats, with persistent URI permission where supported. Non-media documents are skipped and cannot be sent to the TV or added to playback queues.
 - Optional full gallery access using Android runtime permissions, requested only after the user taps the gallery access control.
@@ -34,6 +34,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - Original image MIME types are retained for DLNA and TV-browser requests; known extensions take precedence over generic or incorrect provider MIME labels. Provider MIME parameters are stripped before HTTP and DLNA metadata are generated.
 - Modern image thumbnails and image dimensions use Android ImageDecoder on API 28+ with bounded decode sizes, falling back to BitmapFactory if the platform's modern decoder fails; older Android versions use BitmapFactory for formats available on that system.
 - Image and video thumbnail previews, lazily loaded as gallery items become visible, with memory-conscious handling for older Android versions.
+- Separate photo/video gallery filters with live counts and an adaptive grid of media cards; the hero header appears only on the Gallery screen.
 - Dedicated bottom navigation for Gallery, TV, Playback and Shared Queue, with separate app sections and photo/video filters.
 - Gallery search by filename and photo/video filters.
 - Media library sorting by newest available modification date, filename and file size, with unknown metadata kept at the end.
