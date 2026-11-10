@@ -1,6 +1,8 @@
 package com.admiral456.purecast.dlna
 
 import android.content.Context
+import java.io.IOException
+import java.util.concurrent.CancellationException
 import com.admiral456.purecast.network.WifiNetworkResolver
 import com.admiral456.purecast.network.readTextLimited
 import com.admiral456.purecast.media.MediaFile
@@ -9,7 +11,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import javax.xml.parsers.DocumentBuilderFactory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import com.admiral456.purecast.network.NetworkRetryPolicy
 
 data class DlnaTransportInfo(val state: String, val status: String)
 
@@ -129,7 +133,32 @@ class DlnaController(private val context: Context? = null) {
             "${xmlEscape(mediaUrl)}</res></item></DIDL-Lite>"
     }
 
-    private fun postAction(
+    private suspend fun postAction(
+        device: DlnaDevice,
+        action: String,
+        body: String,
+        controlUrl: String = device.avTransportControlUrl,
+        serviceType: String = device.serviceType
+    ): String {
+        var attempt = 1
+        while (true) {
+            try {
+                // Re-resolve the active Wi-Fi network on each retry.
+                return withContext(Dispatchers.IO) {
+                    postActionOnce(device, action, body, controlUrl, serviceType)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                val retryable = error is IOException ||
+                    (error as? TvHttpException)?.statusCode?.let(NetworkRetryPolicy::isRetryableHttpStatus) == true
+                if (!retryable || attempt >= MAX_NETWORK_ATTEMPTS) throw error
+                delay(NetworkRetryPolicy.delayMillis(attempt))
+                attempt++
+            }
+        }
+    }
+    private fun postActionOnce(
         device: DlnaDevice,
         action: String,
         body: String,
@@ -164,7 +193,8 @@ class DlnaController(private val context: Context? = null) {
             if (code !in 200..299) {
                 val fault = response.replace(Regex("<[^>]+>"), " ")
                     .replace(Regex("\\s+"), " ").trim()
-                throw IllegalStateException(
+                throw TvHttpException(
+                    code,
                     "Televize odmítla příkaz $action (HTTP $code)." +
                         if (fault.isBlank()) "" else " " + fault.take(240)
                 )
@@ -190,4 +220,7 @@ class DlnaController(private val context: Context? = null) {
 }
 
 
+private class TvHttpException(val statusCode: Int, message: String) : IllegalStateException(message)
+
+private const val MAX_NETWORK_ATTEMPTS = 3
 private const val MAX_SOAP_RESPONSE_BYTES = 1_048_576
