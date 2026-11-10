@@ -585,6 +585,12 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
             browserPairingInput = initialPairing.code
             browserPairingError = null
             browserPaired = false
+            playingDevice = null
+            playingFile = null
+            playingSharedEntryId = null
+            transportInfo = null
+            positionInfo = null
+            seekPreviewSeconds = 0f
             playingTitle = "TV prohlížeč – vzdálené ovládání"
             status = "QR kód načten. Ověřuji jednorázové párování televizoru…"
             pairBrowserSession()
