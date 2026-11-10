@@ -108,6 +108,7 @@ import com.admiral456.purecast.playback.PureCastPlaybackService
 import com.admiral456.purecast.playback.PureCastRuntime
 import com.admiral456.purecast.server.TvPairingResult
 import com.admiral456.purecast.server.TvRemoteAction
+import com.admiral456.purecast.server.TvPairingDeepLink
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -150,7 +151,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme(colorScheme = if (isSystemInDarkTheme()) PureCastDark else PureCastLight) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    PureCastScreen()
+                    PureCastScreen(TvPairingDeepLink.parse(intent?.dataString))
                 }
             }
         }
@@ -158,11 +159,11 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun PureCastScreen() {
+private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPairingLaunch? = null) {
     val context = LocalContext.current
     val appContext = context.applicationContext
     val scope = rememberCoroutineScope()
-    var selectedTab by remember { mutableStateOf(PureCastTab.GALLERY) }
+    var selectedTab by remember { mutableStateOf(if (initialPairing == null) PureCastTab.GALLERY else PureCastTab.PLAYBACK) }
     val discovery = remember { DlnaDiscovery(appContext) }
     val controller = remember { DlnaController(appContext) }
     val senderInfo = remember { SenderDeviceInfo.current() }
@@ -205,10 +206,10 @@ private fun PureCastScreen() {
     var isError by remember { mutableStateOf(false) }
     var playingDevice by remember { mutableStateOf<DlnaDevice?>(null) }
     var playingFile by remember { mutableStateOf<MediaFile?>(null) }
-    var playingTitle by remember { mutableStateOf<String?>(null) }
+    var playingTitle by remember { mutableStateOf(initialPairing?.let { "TV prohlížeč – vzdálené ovládání" }) }
     var playingSharedEntryId by remember { mutableStateOf<String?>(null) }
-    var browserUrl by remember { mutableStateOf<String?>(null) }
-    var browserPairingInput by remember { mutableStateOf("") }
+    var browserUrl by remember { mutableStateOf<String?>(initialPairing?.browserUrl) }
+    var browserPairingInput by remember { mutableStateOf(initialPairing?.code.orEmpty()) }
     var browserPairingError by remember { mutableStateOf<String?>(null) }
     var browserPaired by remember { mutableStateOf(false) }
     var transportInfo by remember { mutableStateOf<DlnaTransportInfo?>(null) }
@@ -564,6 +565,13 @@ private fun PureCastScreen() {
             } catch (error: Exception) {
                 browserPairingError = error.message ?: "Párování televizoru se nezdařilo."
             }
+        }
+    }
+
+    LaunchedEffect(initialPairing) {
+        if (initialPairing != null) {
+            status = "QR kód načten. Ověřuji jednorázové párování televizoru…"
+            pairBrowserSession()
         }
     }
 
@@ -1671,7 +1679,7 @@ private fun PureCastScreen() {
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 ) { Text("Zkopírovat adresu přehrávače") }
-                                if (playingFile?.isVideo == true) {
+                                if (playingFile?.isVideo == true || initialPairing != null) {
                                     if (!browserPaired) {
                                         OutlinedTextField(
                                             value = browserPairingInput,
