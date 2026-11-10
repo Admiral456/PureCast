@@ -83,6 +83,8 @@ import com.admiral456.purecast.dlna.DlnaController
 import com.admiral456.purecast.dlna.DlnaCompatibility
 import com.admiral456.purecast.dlna.MediaCompatibility
 import com.admiral456.purecast.dlna.DlnaDevice
+import com.admiral456.purecast.dlna.SavedTvLogic
+import com.admiral456.purecast.dlna.SavedTvStore
 import com.admiral456.purecast.dlna.DlnaDiscovery
 import com.admiral456.purecast.dlna.DlnaTransportInfo
 import com.admiral456.purecast.dlna.DlnaPositionInfo
@@ -179,6 +181,8 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
     val senderInfo = remember { SenderDeviceInfo.current() }
 
     var devices by remember { mutableStateOf<List<DlnaDevice>>(emptyList()) }
+    val savedTvStore = remember { SavedTvStore(appContext) }
+    var savedTvs by remember { mutableStateOf(savedTvStore.load()) }
     var selectedDeviceId by remember { mutableStateOf<String?>(null) }
     val selectedFiles = remember { mutableStateListOf<MediaFile>() }
     val playbackQueue = remember { mutableStateListOf<MediaFile>() }
@@ -933,10 +937,14 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
                                 status = "Prohledávám síť přes UPnP / SSDP…"
                                 try {
                                     val found = discovery.discover()
+                                    savedTvs = SavedTvLogic.refreshProfiles(savedTvs, found)
+                                    savedTvStore.save(savedTvs)
                                     devices = found
-                                    if (selectedDeviceId == null || found.none { it.id == selectedDeviceId }) {
-                                        selectedDeviceId = found.firstOrNull()?.id
-                                    }
+                                    selectedDeviceId = SavedTvLogic.preferredDeviceId(
+                                        selectedDeviceId,
+                                        found,
+                                        savedTvs
+                                    )
                                     status = if (found.isEmpty()) {
                                         "Nenalezen žádný ovladatelný DLNA přehrávač. Zkus režim prohlížeče televize níže."
                                     } else {
@@ -968,6 +976,56 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
                     }
 
                     StatusMessage(text = status, error = isError)
+                    if (savedTvs.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                "Moje televizory",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            savedTvs.forEach { saved ->
+                                val liveDevice = devices.firstOrNull { it.udn == saved.udn }
+                                Card(
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (liveDevice != null)
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)
+                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                            Text(saved.friendlyName, fontWeight = FontWeight.SemiBold)
+                                            Text(
+                                                listOfNotNull(saved.manufacturer, saved.modelName)
+                                                    .filter { it.isNotBlank() }.distinct().joinToString(" · ")
+                                                    .ifBlank { "Uložený UPnP televizor" },
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                if (liveDevice == null) "Teď nenalezen – zkus znovu vyhledat"
+                                                else if (liveDevice.id == selectedDeviceId) "Připojený · vybraný"
+                                                else "Připojený v této síti",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (liveDevice == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.secondary
+                                            )
+                                        }
+                                        if (liveDevice != null && liveDevice.id != selectedDeviceId) {
+                                            TextButton(onClick = { selectedDeviceId = liveDevice.id }) { Text("Vybrat") }
+                                        }
+                                        TextButton(onClick = {
+                                            savedTvs = savedTvs.filterNot { it.udn == saved.udn }
+                                            savedTvStore.save(savedTvs)
+                                        }) { Text("Odebrat") }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     if (devices.isNotEmpty()) {
                         devices.forEach { device ->
                             val isSelected = device.id == selectedDeviceId
@@ -1006,9 +1064,33 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
                                         color = MaterialTheme.colorScheme.secondary
                                     )
                                     Text("UPnP AVTransport · Direct Play", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                    if (device.udn != null) {
+                                        val isSaved = savedTvs.any { it.udn == device.udn }
+                                        TextButton(
+                                            onClick = {
+                                                savedTvs = SavedTvLogic.toggle(savedTvs, device)
+                                                savedTvStore.save(savedTvs)
+                                            },
+                                            modifier = Modifier.align(Alignment.End)
+                                        ) {
+                                            Text(if (isSaved) "★ Uložený televizor" else "☆ Uložit televizor")
+                                        }
+                                    } else {
+                                        Text(
+                                            "Toto zařízení neposkytuje stabilní ID, proto ho nelze uložit do seznamu.",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                         }
+                    } else if (savedTvs.isNotEmpty()) {
+                        Text(
+                            "Uložené televizory jsou v seznamu výše. Vyhledej síť znovu, až budou zapnuté a připojené k Wi-Fi.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
