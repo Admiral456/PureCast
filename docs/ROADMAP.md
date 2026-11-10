@@ -1,5 +1,11 @@
 # PureCast roadmap
 
+## 0.33.0 — Avoid stale playback controls (in progress)
+- Disable TV transport commands after repeated failures to refresh the TV's reported state; manual refresh remains available.
+- Hide stale seek position and disable seeking after repeated timeline failures.
+- Automatically restore controls and timeline after fresh TV responses.
+- Add unit tests for unavailable states and recovery.
+
 ## 0.32.0 — Playback status recovery (in progress)
 - Track TV transport-status and timeline failures independently.
 - Warn only after repeated failures, distinguishing an unresponsive TV control endpoint from an unavailable playback position.

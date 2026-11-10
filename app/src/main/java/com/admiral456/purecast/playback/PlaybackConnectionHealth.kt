@@ -8,11 +8,17 @@ data class PlaybackConnectionHealth(
     val transportFailures: Int = 0,
     val positionFailures: Int = 0
 ) {
+    val isTransportUnresponsive: Boolean
+        get() = transportFailures >= WARNING_THRESHOLD
+
+    val isPositionUnavailable: Boolean
+        get() = positionFailures >= WARNING_THRESHOLD
+
     val warningMessage: String?
         get() = when {
-            transportFailures >= WARNING_THRESHOLD ->
+            isTransportUnresponsive ->
                 "Televize opakovaně neodpovídá na stav přehrávání. PureCast přenos nepřerušuje a dál to zkouší; zkontroluj síť nebo obnov stav ručně."
-            positionFailures >= WARNING_THRESHOLD ->
+            isPositionUnavailable ->
                 "Televize nevrací časovou pozici videa. Samotný přenos může pokračovat; ovládání přehrávání zůstává dostupné."
             else -> null
         }

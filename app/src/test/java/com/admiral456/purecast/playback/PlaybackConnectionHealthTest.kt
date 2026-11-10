@@ -52,6 +52,29 @@ class PlaybackConnectionHealthTest {
         assertNull(recovered.warningMessage)
     }
 
+
+    @Test
+    fun repeatedTransportFailuresMarkControlsUnsafeUntilRecovery() {
+        var state = PlaybackConnectionHealth()
+        state = PlaybackConnectionHealthPolicy.transportFailed(state)
+        assertEquals(false, state.isTransportUnresponsive)
+        state = PlaybackConnectionHealthPolicy.transportFailed(state)
+        assertEquals(true, state.isTransportUnresponsive)
+        state = PlaybackConnectionHealthPolicy.transportSucceeded(state)
+        assertEquals(false, state.isTransportUnresponsive)
+    }
+
+    @Test
+    fun repeatedPositionFailuresMarkTimelineUnavailableUntilRecovery() {
+        var state = PlaybackConnectionHealth()
+        state = PlaybackConnectionHealthPolicy.positionFailed(state)
+        assertEquals(false, state.isPositionUnavailable)
+        state = PlaybackConnectionHealthPolicy.positionFailed(state)
+        assertEquals(true, state.isPositionUnavailable)
+        state = PlaybackConnectionHealthPolicy.positionSucceeded(state)
+        assertEquals(false, state.isPositionUnavailable)
+    }
+
     @Test
     fun countersStayBoundedDuringLongOutages() {
         var state = PlaybackConnectionHealth()

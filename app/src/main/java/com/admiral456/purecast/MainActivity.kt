@@ -309,6 +309,10 @@ private fun PureCastScreen() {
                 if (!isSeekingPlayback) {
                     seekPreviewSeconds = latestPosition.positionSeconds?.toFloat() ?: 0f
                 }
+            } else if (playbackHealth.isPositionUnavailable) {
+                // Do not leave an old timeline visible as though it were current.
+                positionInfo = null
+                isSeekingPlayback = false
             }
         }
     }
@@ -1824,13 +1828,13 @@ private fun PureCastScreen() {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
                                 onClick = { runPlaybackAction("Přehrávání pozastaveno.") { controller.pause(it) } },
-                                enabled = busyLabel == null && PlaybackControlAvailability.canPause(transportInfo?.state),
+                                enabled = busyLabel == null && !playbackHealth.isTransportUnresponsive && PlaybackControlAvailability.canPause(transportInfo?.state),
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                             ) { Text("Pozastavit") }
                             OutlinedButton(
                                 onClick = { runPlaybackAction("Pokračuji v přehrávání.") { controller.resume(it) } },
-                                enabled = busyLabel == null && PlaybackControlAvailability.canResume(transportInfo?.state),
+                                enabled = busyLabel == null && !playbackHealth.isTransportUnresponsive && PlaybackControlAvailability.canResume(transportInfo?.state),
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                             ) { Text("Pokračovat") }
@@ -1848,7 +1852,7 @@ private fun PureCastScreen() {
                                         positionInfo = null
                                     }
                                 },
-                                enabled = busyLabel == null && PlaybackControlAvailability.canStop(transportInfo?.state),
+                                enabled = busyLabel == null && !playbackHealth.isTransportUnresponsive && PlaybackControlAvailability.canStop(transportInfo?.state),
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                             ) { Text("Zastavit") }
@@ -1900,7 +1904,7 @@ private fun PureCastScreen() {
                                         isSeekingPlayback = true
                                     },
                                     valueRange = 0f..maxPosition,
-                                    enabled = busyLabel == null,
+                                    enabled = busyLabel == null && !playbackHealth.isPositionUnavailable,
                                     onValueChangeFinished = {
                                         isSeekingPlayback = false
                                         val target = seekPreviewSeconds.toLong().coerceIn(0L, duration)
