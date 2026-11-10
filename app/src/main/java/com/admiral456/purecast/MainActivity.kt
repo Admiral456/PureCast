@@ -42,6 +42,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Slider
@@ -110,6 +112,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val MAX_SELECTED_MEDIA = 50
+
+private enum class PureCastTab { GALLERY, TELEVISION, PLAYBACK, SHARED }
 private const val MAX_GALLERY_SCAN_ITEMS = 250
 
 private val PureCastLight = lightColorScheme(
@@ -152,6 +156,7 @@ private fun PureCastScreen() {
     val context = LocalContext.current
     val appContext = context.applicationContext
     val scope = rememberCoroutineScope()
+    var selectedTab by remember { mutableStateOf(PureCastTab.GALLERY) }
     val discovery = remember { DlnaDiscovery(appContext) }
     val controller = remember { DlnaController(appContext) }
     val senderInfo = remember { SenderDeviceInfo.current() }
@@ -761,8 +766,9 @@ private fun PureCastScreen() {
         )
     }
 
+    Column(modifier = Modifier.fillMaxSize()) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.weight(1f),
         contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -806,7 +812,7 @@ private fun PureCastScreen() {
             }
         }
 
-        item {
+        if (selectedTab == PureCastTab.TELEVISION) item {
             SectionTitle("Televize", "Vyhledej DLNA přehrávače v domácí síti.")
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -903,7 +909,7 @@ private fun PureCastScreen() {
             }
         }
 
-        item {
+        if (selectedTab == PureCastTab.GALLERY) item {
             SectionTitle("Fotky a videa", "Vyber originální soubory z telefonu. PureCast je nebude převádět.")
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1014,7 +1020,7 @@ private fun PureCastScreen() {
                             FilterChip(
                                 selected = mediaKindFilter == MediaKindFilter.PHOTOS,
                                 onClick = { mediaKindFilter = MediaKindFilter.PHOTOS },
-                                label = { Text("Fotky") }
+                                label = { Text("Fotografie") }
                             )
                             FilterChip(
                                 selected = mediaKindFilter == MediaKindFilter.VIDEOS,
@@ -1215,7 +1221,7 @@ private fun PureCastScreen() {
                 }
             }
 
-        if (playbackQueue.isNotEmpty()) {
+        if (selectedTab == PureCastTab.PLAYBACK && playbackQueue.isNotEmpty()) {
             item {
                 SectionTitle("Fronta přehrávání", "Připrav si pořadí médií a přepínej mezi nimi bez nového výběru.")
                 Card(
@@ -1315,7 +1321,11 @@ private fun PureCastScreen() {
             }
         }
 
-        item {
+        if (selectedTab == PureCastTab.PLAYBACK && playbackQueue.isEmpty() && playingTitle == null) {
+            item { EmptyState("Zatím nic nepřehráváš", "Přidej fotografie nebo videa do fronty v galerii.") }
+        }
+
+        if (selectedTab == PureCastTab.SHARED) item {
             SectionTitle(
                 "Sdílená fronta",
                 "Spoj několik Android telefonů přes stejnou Wi-Fi. Originální soubory zůstávají v telefonech odesílatelů."
@@ -1479,7 +1489,7 @@ private fun PureCastScreen() {
             }
         }
 
-        if (playingTitle != null) {
+        if (selectedTab == PureCastTab.PLAYBACK && playingTitle != null) {
             item {
                 SectionTitle("Přehrávání", "Vyber režim přehrávání podle možností své televize.")
                 Card(
@@ -1650,7 +1660,7 @@ private fun PureCastScreen() {
             }
         }
 
-        item {
+        if (selectedTab == PureCastTab.GALLERY) item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
@@ -1666,6 +1676,33 @@ private fun PureCastScreen() {
                 }
             }
         }
+    }
+    NavigationBar {
+        NavigationBarItem(
+            selected = selectedTab == PureCastTab.GALLERY,
+            onClick = { selectedTab = PureCastTab.GALLERY },
+            icon = { Text("▦") },
+            label = { Text("Galerie", maxLines = 1) }
+        )
+        NavigationBarItem(
+            selected = selectedTab == PureCastTab.TELEVISION,
+            onClick = { selectedTab = PureCastTab.TELEVISION },
+            icon = { Text("TV") },
+            label = { Text("Televize", maxLines = 1) }
+        )
+        NavigationBarItem(
+            selected = selectedTab == PureCastTab.PLAYBACK,
+            onClick = { selectedTab = PureCastTab.PLAYBACK },
+            icon = { Text("▶") },
+            label = { Text("Přehrávání", maxLines = 1) }
+        )
+        NavigationBarItem(
+            selected = selectedTab == PureCastTab.SHARED,
+            onClick = { selectedTab = PureCastTab.SHARED },
+            icon = { Text("⇄") },
+            label = { Text("Sdílení", maxLines = 1) }
+        )
+    }
     }
 }
 
