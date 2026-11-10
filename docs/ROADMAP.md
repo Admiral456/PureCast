@@ -27,6 +27,7 @@
 - [x] Thumbnail previews for images and videos.
 - [x] Lazy gallery item rendering to limit simultaneous thumbnail decoding.
 - [x] Filename search and photo/video type filters.
+- [x] Separate photography and video views with live counts and adaptive thumbnail grid cards.
 - [x] Memory-conscious thumbnail decoding for older Android versions.
 - [x] Unit tests for byte ranges, UPnP time values, MIME compatibility, media filters, media tokens and brand classification.
 - [x] GitHub Actions tests, debug and release APK builds, with APK package verification.
@@ -77,6 +78,7 @@
 
 - [x] Prefer Wi-Fi rather than mobile/VPN routes for TV discovery and local playback URLs when available.
 - [x] Retry transient DLNA control-plane network failures with bounded backoff and re-resolve the active Wi-Fi network per attempt.
+- [x] Retry transient TV-browser media network errors up to three times and restore the prior video position when the browser permits it.
 - [ ] Add large-file, slow-network and interrupted-transfer stress tests.
 - [ ] Add explicit media server access revocation and token refresh.
 - [x] Revoke a participant token and remove their submitted items when they explicitly leave the group.
