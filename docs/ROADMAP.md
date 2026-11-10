@@ -1,5 +1,11 @@
 # PureCast roadmap
 
+## 0.32.0 — Playback status recovery (in progress)
+- Track TV transport-status and timeline failures independently.
+- Warn only after repeated failures, distinguishing an unresponsive TV control endpoint from an unavailable playback position.
+- Keep the media server and current stream alive when status polling fails; clear each warning automatically when that endpoint responds again.
+- Add unit tests for repeated failures, recovery and bounded counters.
+
 ## 0.31.0 — Release thumbnail cache under memory pressure (in progress)
 - Clear cached preview bitmaps when Android reports low or critical memory conditions.
 - Clear the same cache on the activity low-memory callback.

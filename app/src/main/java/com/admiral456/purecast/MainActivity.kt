@@ -102,6 +102,8 @@ import com.admiral456.purecast.group.GroupQueueLogic
 import com.admiral456.purecast.group.GroupQueueServer
 import com.admiral456.purecast.group.GroupQueueSnapshot
 import com.admiral456.purecast.playback.PlaybackQueueLogic
+import com.admiral456.purecast.playback.PlaybackConnectionHealth
+import com.admiral456.purecast.playback.PlaybackConnectionHealthPolicy
 import com.admiral456.purecast.playback.PlaybackControlAvailability
 import com.admiral456.purecast.playback.PureCastPlaybackService
 import com.admiral456.purecast.playback.PureCastRuntime
@@ -223,6 +225,7 @@ private fun PureCastScreen() {
     var positionInfo by remember { mutableStateOf<DlnaPositionInfo?>(null) }
     var seekPreviewSeconds by remember { mutableStateOf(0f) }
     var isSeekingPlayback by remember { mutableStateOf(false) }
+    var playbackHealth by remember { mutableStateOf(PlaybackConnectionHealth()) }
     var transferStats by remember { mutableStateOf(TransferMetricsSnapshot()) }
 
     val activeDevice = devices.firstOrNull { it.id == selectedDeviceId }
@@ -272,6 +275,7 @@ private fun PureCastScreen() {
 
     LaunchedEffect(playingDevice) {
         val device = playingDevice ?: return@LaunchedEffect
+        playbackHealth = PlaybackConnectionHealth()
         while (true) {
             delay(3_000)
             val latestTransport = try {
@@ -281,6 +285,11 @@ private fun PureCastScreen() {
             } catch (_: Exception) {
                 null
             }
+            playbackHealth = if (latestTransport != null) {
+                PlaybackConnectionHealthPolicy.transportSucceeded(playbackHealth)
+            } else {
+                PlaybackConnectionHealthPolicy.transportFailed(playbackHealth)
+            }
             if (latestTransport != null) transportInfo = latestTransport
 
             val latestPosition = try {
@@ -289,6 +298,11 @@ private fun PureCastScreen() {
                 throw cancelled
             } catch (_: Exception) {
                 null
+            }
+            playbackHealth = if (latestPosition != null) {
+                PlaybackConnectionHealthPolicy.positionSucceeded(playbackHealth)
+            } else {
+                PlaybackConnectionHealthPolicy.positionFailed(playbackHealth)
             }
             if (latestPosition != null) {
                 positionInfo = latestPosition
@@ -1846,7 +1860,9 @@ private fun PureCastScreen() {
                                     "Stav televize byl aktualizován."
                                 ) {
                                     transportInfo = controller.getTransportInfo(it)
+                                    playbackHealth = PlaybackConnectionHealthPolicy.transportSucceeded(playbackHealth)
                                     positionInfo = controller.getPositionInfo(it)
+                                    playbackHealth = PlaybackConnectionHealthPolicy.positionSucceeded(playbackHealth)
                                     seekPreviewSeconds = positionInfo?.positionSeconds?.toFloat() ?: 0f
                                     isSeekingPlayback = false
                                 }
@@ -1859,6 +1875,9 @@ private fun PureCastScreen() {
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        playbackHealth.warningMessage?.let { warning ->
+                            StatusMessage(warning, error = true)
+                        }
                         transportInfo?.let {
                             StatusMessage(
                                 text = "Stav: ${it.state.replace('_', ' ')} · ${it.status}",
