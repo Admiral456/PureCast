@@ -146,8 +146,9 @@ class DlnaDiscovery(context: Context) {
             val resolvedConnectionManagerUrl = connectionManagerPath?.let {
                 URL(controlBase, it).toExternalForm()
             }
+            val udn = deviceElement.firstText("UDN").takeIf { it.isNotBlank() }
             DlnaDevice(
-                id = deviceElement.firstText("UDN").ifBlank { location },
+                id = udn ?: location,
                 friendlyName = deviceElement.firstText("friendlyName").ifBlank { "DLNA televizor" },
                 manufacturer = deviceElement.firstText("manufacturer").ifBlank { null },
                 modelName = deviceElement.firstText("modelName").ifBlank { null },
@@ -155,7 +156,8 @@ class DlnaDiscovery(context: Context) {
                 avTransportControlUrl = resolvedControlUrl,
                 serviceType = serviceType,
                 connectionManagerControlUrl = resolvedConnectionManagerUrl,
-                connectionManagerServiceType = connectionManagerType
+                connectionManagerServiceType = connectionManagerType,
+                udn = udn
             )
         } catch (_: Exception) {
             null
