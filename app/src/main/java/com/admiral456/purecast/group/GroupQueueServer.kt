@@ -4,9 +4,7 @@ import android.content.Context
 import com.admiral456.purecast.network.WifiNetworkResolver
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
 import java.io.Closeable
-import java.io.IOException
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -62,8 +60,8 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
     @Synchronized
     fun start(): GroupQueueCredentials {
         if (serverSocket?.isClosed == false) return hostCredentials()
-        val ip = WifiNetworkResolver.activeWifiIpv4(appContext)
-            ?: throw IllegalStateException("Telefon není připojený k použitelné Wi-Fi IPv4 síti.")
+        val ip = WifiNetworkResolver.localLanIpv4(appContext)
+            ?: throw IllegalStateException("Telefon není připojený k použitelné místní Wi-Fi, hotspot nebo Ethernet IPv4 síti.")
         val socket = ServerSocket()
         socket.reuseAddress = true
         socket.bind(InetSocketAddress(ip, 0))
@@ -123,14 +121,12 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
         val remote: String
     )
 
-    private class TooLarge : IOException()
-
     private fun handleClient(socket: Socket) {
         socket.use { client ->
             client.soTimeout = 8_000
             val request = try {
                 readRequest(client)
-            } catch (_: TooLarge) {
+            } catch (_: GroupQueueRequestParser.TooLarge) {
                 respond(client, 413, error("Požadavek je příliš velký."))
                 return
             } catch (_: Exception) {
@@ -146,43 +142,13 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
     }
 
     private fun readRequest(socket: Socket): Request? {
-        val input = socket.getInputStream()
-        val bytes = ByteArrayOutputStream()
-        val end = byteArrayOf(13, 10, 13, 10)
-        var matched = 0
-        while (bytes.size() < MAX_HEADER_BYTES) {
-            val value = input.read()
-            if (value < 0) return null
-            bytes.write(value)
-            matched = when {
-                value == end[matched].toInt() -> matched + 1
-                value == 13 -> 1
-                else -> 0
-            }
-            if (matched == 4) break
-        }
-        if (matched != 4) throw TooLarge()
-
-        val lines = String(bytes.toByteArray(), Charsets.ISO_8859_1).split("\r\n")
-        val parts = lines.firstOrNull()?.split(' ') ?: throw IOException("Missing request line")
-        val method = parts.getOrNull(0)?.uppercase().orEmpty()
-        val path = parts.getOrNull(1)?.substringBefore('?').orEmpty()
-        if (method !in setOf("GET", "POST") || path.isBlank()) throw IOException("Bad request")
-        val headers = linkedMapOf<String, String>()
-        lines.drop(1).forEach { line ->
-            val colon = line.indexOf(':')
-            if (colon > 0) headers[line.substring(0, colon).trim().lowercase()] = line.substring(colon + 1).trim()
-        }
-        val length = headers["content-length"]?.toIntOrNull() ?: 0
-        if (length !in 0..MAX_BODY_BYTES) throw TooLarge()
-        val body = ByteArray(length)
-        var offset = 0
-        while (offset < length) {
-            val count = input.read(body, offset, length - offset)
-            if (count < 0) throw IOException("Incomplete body")
-            offset += count
-        }
-        return Request(method, path, headers, String(body, Charsets.UTF_8), socket.inetAddress.hostAddress ?: "unknown")
+        val parsed = GroupQueueRequestParser.read(
+            input = socket.getInputStream(),
+            remote = socket.inetAddress.hostAddress ?: "unknown",
+            maxHeaderBytes = MAX_HEADER_BYTES,
+            maxBodyBytes = MAX_BODY_BYTES
+        ) ?: return null
+        return Request(parsed.method, parsed.path, parsed.headers, parsed.body, parsed.remote)
     }
 
     private fun route(socket: Socket, request: Request) {
@@ -202,6 +168,8 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
                 respond(socket, 200, snapshotJson(snapshot()))
             request.method == "POST" && request.path == "/v1/leave" ->
                 leave(socket, participantId, token)
+            request.method == "POST" && request.path == "/v1/participants/remove" ->
+                removeParticipant(socket, request, participantId)
             request.method == "POST" && request.path == "/v1/queue/add" ->
                 add(socket, request, participantId)
             request.method == "POST" && request.path == "/v1/queue/remove" ->
@@ -263,6 +231,42 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
         respond(socket, 200, JSONObject().put("left", true))
     }
 
+    private fun removeParticipant(socket: Socket, request: Request, actorParticipantId: String) {
+        if (!isHost(actorParticipantId)) {
+            respond(socket, 403, error("Účastníky může ze skupiny odebírat pouze hostitel."))
+            return
+        }
+        val targetId = JSONObject(request.body).optString("participantId").trim()
+        if (targetId.isBlank()) {
+            respond(socket, 400, error("Není vybraný účastník k odebrání."))
+            return
+        }
+        synchronized(lock) {
+            val target = participants[targetId]
+            if (target == null) {
+                respond(socket, 404, error("Tento telefon už ve skupině není."))
+                return
+            }
+            if (target.isHost) {
+                respond(socket, 403, error("Hostitele nelze odebrat ze své vlastní skupiny."))
+                return
+            }
+            participants.remove(targetId)
+            val revokedTokens = tokens.entries
+                .filter { it.value == targetId }
+                .map { it.key }
+            revokedTokens.forEach { revokedToken -> tokens.remove(revokedToken) }
+            val removedEntries = GroupQueueLogic.entriesFromParticipant(entries, targetId)
+            entries.removeAll { it.senderParticipantId == targetId }
+            currentEntryId = GroupQueueLogic.currentEntryAfterParticipantRemoval(
+                currentEntryId,
+                removedEntries
+            )
+            revision++
+        }
+        respond(socket, 200, snapshotJson(snapshot()))
+    }
+
     private fun add(socket: Socket, request: Request, participantId: String) {
         val json = JSONObject(request.body)
         val title = json.optString("title").trim().take(180)
@@ -273,21 +277,24 @@ class GroupQueueServer(context: Context, hostDisplayName: String) : Closeable {
             respond(socket, 400, error("Položka nemá platný název, MIME typ nebo odkaz do místní sítě."))
             return
         }
-        val sender = synchronized(lock) { participants[participantId] }
-        if (sender == null) {
-            respond(socket, 401, error("Účastník už není součástí skupiny."))
-            return
-        }
-        val entry = GroupQueueEntry(
-            UUID.randomUUID().toString(), title, mime, url, size,
-            participantId, sender.displayName, System.currentTimeMillis()
-        )
         synchronized(lock) {
+            // Re-check membership while holding the same lock used for queue insertion.
+            // This prevents an in-flight request from re-adding items after the host removes its sender.
+            val sender = participants[participantId]
+            if (sender == null) {
+                respond(socket, 401, error("Účastník už není součástí skupiny."))
+                return
+            }
             if (entries.size >= MAX_ENTRIES) {
                 respond(socket, 409, error("Sdílená fronta může obsahovat nejvýše $MAX_ENTRIES položek."))
                 return
             }
-            entries.add(entry)
+            entries.add(
+                GroupQueueEntry(
+                    UUID.randomUUID().toString(), title, mime, url, size,
+                    participantId, sender.displayName, System.currentTimeMillis()
+                )
+            )
             revision++
         }
         respond(socket, 200, snapshotJson(snapshot()))

@@ -7,7 +7,9 @@ import android.net.Network
 import com.admiral456.purecast.network.WifiNetworkResolver
 import com.admiral456.purecast.network.readBytesLimited
 import java.net.DatagramPacket
-import java.net.DatagramSocket
+import java.net.MulticastSocket
+import java.net.InetSocketAddress
+import java.net.NetworkInterface
 import java.net.InetAddress
 import java.net.URL
 import javax.xml.parsers.DocumentBuilderFactory
@@ -23,12 +25,26 @@ class DlnaDiscovery(context: Context) {
     }
 
     private fun discoverBlocking(timeoutMs: Long): List<DlnaDevice> {
+        val activeWifiNetwork = WifiNetworkResolver.activeWifiNetwork(appContext)
+        val localIpv4 = WifiNetworkResolver.localLanIpv4(appContext)
+        // If a SoftAP address was selected, do not bind to an unrelated upstream
+        // Wi-Fi network merely because it is active. Bind the socket to the AP
+        // interface instead when Android does not expose a matching Network.
+        val wifiNetwork = if (localIpv4 != null) {
+            WifiNetworkResolver.networkForAddress(appContext, localIpv4)
+        } else {
+            activeWifiNetwork
+        }
+        if (wifiNetwork == null && localIpv4 == null) {
+            throw IllegalStateException(
+                "Pro místní připojení není dostupná Wi-Fi ani hotspot. Zapni hotspot telefonu a připoj k němu televizi, nebo připoj obě zařízení ke stejné Wi-Fi síti. Samotná mobilní data pro přímé DLNA spojení nestačí."
+            )
+        }
         val wifi = appContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         val multicastLock = wifi.createMulticastLock("PureCast-SSDP").apply {
             setReferenceCounted(false)
             acquire()
         }
-        val wifiNetwork = WifiNetworkResolver.activeWifiNetwork(appContext)
         val locations = linkedSetOf<String>()
         val searchTargets = listOf(
             "urn:schemas-upnp-org:device:MediaRenderer:1",
@@ -37,13 +53,25 @@ class DlnaDiscovery(context: Context) {
         )
 
         try {
-            DatagramSocket().use { socket ->
-                wifiNetwork?.let { network ->
+            MulticastSocket(null).use { socket ->
+                if (wifiNetwork != null) {
                     try {
-                        network.bindSocket(socket)
+                        wifiNetwork.bindSocket(socket)
                     } catch (error: Exception) {
                         throw IllegalStateException(
                             "Vyhledávání televizorů se nepodařilo navázat na Wi-Fi síť.",
+                            error
+                        )
+                    }
+                } else {
+                    val localAddress = localIpv4
+                        ?: throw IllegalStateException("Není dostupná místní IPv4 adresa pro vyhledání televizoru.")
+                    try {
+                        socket.bind(InetSocketAddress(localAddress, 0))
+                        NetworkInterface.getByInetAddress(localAddress)?.let { socket.networkInterface = it }
+                    } catch (error: Exception) {
+                        throw IllegalStateException(
+                            "Vyhledávání televizorů se nepodařilo navázat na místní hotspot nebo síť.",
                             error
                         )
                     }
@@ -84,7 +112,15 @@ class DlnaDiscovery(context: Context) {
         } finally {
             if (multicastLock.isHeld) multicastLock.release()
         }
-        return locations.mapNotNull { location -> loadRendererDescription(location, wifiNetwork) }.distinctBy { it.id }
+        return locations.mapNotNull { location ->
+            val targetNetwork = try {
+                val address = java.net.URI(location).host?.let(java.net.InetAddress::getByName)
+                address?.let { WifiNetworkResolver.networkForAddress(appContext, it) }
+            } catch (_: Exception) {
+                null
+            }
+            loadRendererDescription(location, targetNetwork)
+        }.distinctBy { it.id }
     }
 
     private fun loadRendererDescription(location: String, network: Network?): DlnaDevice? {

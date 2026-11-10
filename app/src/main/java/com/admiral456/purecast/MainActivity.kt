@@ -42,6 +42,9 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Slider
@@ -83,33 +86,43 @@ import com.admiral456.purecast.dlna.DlnaTransportInfo
 import com.admiral456.purecast.dlna.DlnaPositionInfo
 import com.admiral456.purecast.dlna.UpnpTime
 import com.admiral456.purecast.media.MediaFile
-import com.admiral456.purecast.media.MediaInspector
+import com.admiral456.purecast.media.MediaImportPolicy
 import com.admiral456.purecast.media.MediaKindFilter
 import com.admiral456.purecast.media.MediaLibraryFilter
 import com.admiral456.purecast.media.MediaLibrarySort
 import com.admiral456.purecast.media.MediaThumbnailLoader
-import com.admiral456.purecast.media.MediaTechnicalInfo
+import com.admiral456.purecast.media.MediaThumbnailPolicy
 import com.admiral456.purecast.media.MediaStoreGallery
 import com.admiral456.purecast.permissions.GalleryAccessPolicy
 import com.admiral456.purecast.group.GroupQueueClient
 import com.admiral456.purecast.group.GroupQueueCredentials
 import com.admiral456.purecast.group.GroupQueueEntry
+import com.admiral456.purecast.group.GroupQueueParticipant
 import com.admiral456.purecast.group.GroupQueueLogic
 import com.admiral456.purecast.group.GroupQueueServer
 import com.admiral456.purecast.group.GroupQueueSnapshot
 import com.admiral456.purecast.playback.PlaybackQueueLogic
+import com.admiral456.purecast.playback.PlaybackConnectionHealth
+import com.admiral456.purecast.playback.PlaybackConnectionHealthPolicy
+import com.admiral456.purecast.playback.PlaybackControlAvailability
 import com.admiral456.purecast.playback.PureCastPlaybackService
 import com.admiral456.purecast.playback.PureCastRuntime
+import com.admiral456.purecast.server.TransferMetricsSnapshot
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val MAX_SELECTED_MEDIA = 50
+
+private enum class PureCastTab(val label: String, val glyph: String) {
+    CONNECT("Připojit", "TV"),
+    GALLERY("Galerie", "▦"),
+    QUEUE("Fronta", "≡"),
+    PLAYBACK("Přehrávač", "▶")
+}
 private const val MAX_GALLERY_SCAN_ITEMS = 250
 
 private val PureCastLight = lightColorScheme(
@@ -145,6 +158,18 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        MediaThumbnailLoader.clearCache()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (MediaThumbnailPolicy.shouldClearCacheOnTrim(level)) {
+            MediaThumbnailLoader.clearCache()
+        }
+    }
 }
 
 @Composable
@@ -157,6 +182,7 @@ private fun PureCastScreen() {
     val senderInfo = remember { SenderDeviceInfo.current() }
 
     var devices by remember { mutableStateOf<List<DlnaDevice>>(emptyList()) }
+    var selectedTab by remember { mutableStateOf(PureCastTab.CONNECT) }
     var selectedDeviceId by remember { mutableStateOf<String?>(null) }
     val selectedFiles = remember { mutableStateListOf<MediaFile>() }
     val playbackQueue = remember { mutableStateListOf<MediaFile>() }
@@ -168,8 +194,8 @@ private fun PureCastScreen() {
     var groupCodeInput by remember { mutableStateOf("") }
     var sharedBusy by remember { mutableStateOf(false) }
     var sharedSyncError by remember { mutableStateOf<String?>(null) }
-    val technicalInfo = remember { mutableStateMapOf<String, MediaTechnicalInfo>() }
-    var mediaInspectionJob by remember { mutableStateOf<Job?>(null) }
+    var participantPendingRemoval by remember { mutableStateOf<GroupQueueParticipant?>(null) }
+    var isImportingMedia by remember { mutableStateOf(false) }
     var mediaSearchQuery by remember { mutableStateOf("") }
     var mediaKindFilter by remember { mutableStateOf(MediaKindFilter.ALL) }
     var mediaSort by remember { mutableStateOf(MediaLibrarySort.NEWEST) }
@@ -198,10 +224,22 @@ private fun PureCastScreen() {
     var transportInfo by remember { mutableStateOf<DlnaTransportInfo?>(null) }
     var positionInfo by remember { mutableStateOf<DlnaPositionInfo?>(null) }
     var seekPreviewSeconds by remember { mutableStateOf(0f) }
+    var isSeekingPlayback by remember { mutableStateOf(false) }
+    var playbackHealth by remember { mutableStateOf(PlaybackConnectionHealth()) }
+    var transferStats by remember { mutableStateOf(TransferMetricsSnapshot()) }
 
     val activeDevice = devices.firstOrNull { it.id == selectedDeviceId }
     DisposableEffect(groupServer) {
         onDispose { groupServer?.close() }
+    }
+
+    LaunchedEffect(playingTitle) {
+        if (playingTitle == null) return@LaunchedEffect
+        val mediaServer = PureCastRuntime.getMediaServer(appContext)
+        while (true) {
+            transferStats = mediaServer.transferStats()
+            delay(1_000)
+        }
     }
 
     LaunchedEffect(sharedCredentials, groupServer) {
@@ -216,77 +254,133 @@ private fun PureCastScreen() {
                 if (latest != null) sharedSnapshot = latest
                 sharedSyncError = null
             } catch (error: Exception) {
-                sharedSyncError = error.message ?: "Spojení se sdílenou frontou bylo přerušeno."
+                val message = error.message ?: "Spojení se sdílenou frontou bylo přerušeno."
+                sharedSyncError = message
+                if (!credentials.isHost &&
+                    (message.contains("Přístupový token", ignoreCase = true) ||
+                        message.contains("Účastník už není", ignoreCase = true))
+                ) {
+                    sharedCredentials = null
+                    sharedSnapshot = null
+                    sharedSyncError = null
+                    groupAddressInput = credentials.baseUrl
+                    groupCodeInput = ""
+                    status = "Hostitel tě odebral ze sdílené skupiny. Adresa hostitele zůstala uložená; pro nové připojení potřebuješ aktuální kód."
+                    isError = true
+                }
             }
             delay(2_000)
         }
     }
 
-    fun importMediaUris(uris: List<Uri>, appendToLibrary: Boolean) {
-        if (uris.isEmpty()) return
-        uris.forEach { uri ->
-            try {
-                appContext.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (_: SecurityException) {
-                // Some picker implementations provide temporary grants only.
-            } catch (_: IllegalArgumentException) {
-                // Some picker implementations do not offer persistable grants.
+    LaunchedEffect(playingDevice) {
+        val device = playingDevice ?: return@LaunchedEffect
+        playbackHealth = PlaybackConnectionHealth()
+        while (true) {
+            delay(3_000)
+            val latestTransport = try {
+                controller.getTransportInfo(device)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            playbackHealth = if (latestTransport != null) {
+                PlaybackConnectionHealthPolicy.transportSucceeded(playbackHealth)
+            } else {
+                PlaybackConnectionHealthPolicy.transportFailed(playbackHealth)
+            }
+            if (latestTransport != null) transportInfo = latestTransport
+
+            val latestPosition = try {
+                controller.getPositionInfo(device)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            playbackHealth = if (latestPosition != null) {
+                PlaybackConnectionHealthPolicy.positionSucceeded(playbackHealth)
+            } else {
+                PlaybackConnectionHealthPolicy.positionFailed(playbackHealth)
+            }
+            if (latestPosition != null) {
+                positionInfo = latestPosition
+                if (!isSeekingPlayback) {
+                    seekPreviewSeconds = latestPosition.positionSeconds?.toFloat() ?: 0f
+                }
+            } else if (playbackHealth.isPositionUnavailable) {
+                // Do not leave an old timeline visible as though it were current.
+                positionInfo = null
+                isSeekingPlayback = false
             }
         }
-        mediaInspectionJob?.cancel()
-        mediaInspectionJob = scope.launch {
-            val importedFiles = withContext(Dispatchers.IO) {
-                uris.distinctBy { it.toString() }
-                    .mapNotNull { uri -> runCatching { MediaFile.fromUri(appContext, uri) }.getOrNull() }
-            }
-            val mediaFiles = importedFiles.filter { it.isPlayableMedia }
-            val existingUris = if (appendToLibrary) selectedFiles.map { it.uri }.toSet() else emptySet()
-            val availableSlots = if (appendToLibrary) {
-                (MAX_SELECTED_MEDIA - selectedFiles.size).coerceAtLeast(0)
-            } else {
-                MAX_SELECTED_MEDIA
-            }
-            val uniqueFiles = mediaFiles.filterNot { it.uri in existingUris }
-            val files = uniqueFiles.take(availableSlots)
-            val skippedNonMedia = importedFiles.size - mediaFiles.size
+    }
 
-            if (!appendToLibrary) {
-                technicalInfo.clear()
-                selectedFiles.clear()
-                selectedAlbum = null
-            }
-            selectedFiles.addAll(files)
-            mediaSearchQuery = ""
-            mediaKindFilter = MediaKindFilter.ALL
-            isError = importedFiles.isEmpty() || mediaFiles.isEmpty() ||
-                (files.isEmpty() && availableSlots == 0)
-            status = when {
-                importedFiles.isEmpty() -> "Vybrané soubory se nepodařilo načíst."
-                mediaFiles.isEmpty() -> "Výběr neobsahuje rozpoznané obrázky ani videa. Ostatní dokumenty PureCast nepřehrává."
-                files.isEmpty() && availableSlots == 0 -> "Knihovna už obsahuje maximum $MAX_SELECTED_MEDIA souborů."
-                files.isEmpty() -> "Vybrané obrázky a videa už v knihovně jsou."
-                uniqueFiles.size > files.size ->
-                    "Přidáno ${files.size} médií. Knihovna podporuje nejvýše $MAX_SELECTED_MEDIA položek."
-                skippedNonMedia > 0 ->
-                    "Načteno ${files.size} obrázků a videí. Ostatní dokumenty byly přeskočeny."
-                else -> "Načteno ${files.size} souborů. Náhledy a technické údaje se připravují na pozadí."
-            }
+    fun importMediaUris(uris: List<Uri>, appendToLibrary: Boolean) {
+        if (uris.isEmpty()) return
+        if (isImportingMedia) {
+            status = "Předchozí výběr se ještě zpracovává."
+            return
+        }
 
-            files.chunked(3).forEach { batch ->
-                val details = batch.map { file ->
-                    async(Dispatchers.IO) {
+        val candidateUris = MediaImportPolicy.boundedDistinct(
+            items = uris,
+            maxItems = MAX_SELECTED_MEDIA,
+            keyOf = { it.toString() }
+        )
+        if (candidateUris.isEmpty()) return
+
+        scope.launch {
+            isImportingMedia = true
+            isError = false
+            try {
+                val importedFiles = withContext(Dispatchers.IO) {
+                    candidateUris.mapNotNull { uri ->
                         runCatching {
-                            MediaInspector.inspect(appContext, file)?.let { file.uri.toString() to it }
-                        }.getOrNull()
+                            appContext.contentResolver.takePersistableUriPermission(
+                                uri,
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        }
+                        runCatching { MediaFile.fromUri(appContext, uri) }.getOrNull()
                     }
-                }.awaitAll().filterNotNull()
-                details.forEach { (uri, info) -> technicalInfo[uri] = info }
-            }
-            if (files.isNotEmpty()) {
-                status = "Připraveno ${selectedFiles.size} souborů. Vyber televizi a spusť přehrávání."
+                }
+                val mediaFiles = importedFiles.filter { it.isPlayableMedia }
+                val replaceCurrentLibrary = !appendToLibrary && mediaFiles.isNotEmpty()
+                val existingUris = if (appendToLibrary) selectedFiles.map { it.uri }.toSet() else emptySet()
+                val uniqueFiles = mediaFiles.filterNot { it.uri in existingUris }
+                val currentCount = if (replaceCurrentLibrary) 0 else selectedFiles.size
+                val availableSlots = MediaImportPolicy.availableSlots(currentCount, MAX_SELECTED_MEDIA)
+                val files = uniqueFiles.take(availableSlots)
+                val skippedNonMedia = importedFiles.size - mediaFiles.size
+
+                if (replaceCurrentLibrary) {
+                    selectedFiles.clear()
+                    selectedAlbum = null
+                }
+                selectedFiles.addAll(files)
+                if (files.isNotEmpty()) selectedAlbum = null
+                mediaSearchQuery = ""
+                mediaKindFilter = MediaKindFilter.ALL
+                isError = importedFiles.isEmpty() || mediaFiles.isEmpty() ||
+                    (files.isEmpty() && availableSlots == 0)
+                status = when {
+                    importedFiles.isEmpty() -> "Android neposkytl přístup k vybraným souborům. Zkus výběr zopakovat."
+                    mediaFiles.isEmpty() -> "Výběr neobsahuje rozpoznané fotografie ani videa. Původní knihovna zůstala zachována."
+                    files.isEmpty() && availableSlots == 0 -> "Knihovna už obsahuje maximum $MAX_SELECTED_MEDIA souborů."
+                    files.isEmpty() -> "Vybrané fotografie a videa už v knihovně jsou."
+                    candidateUris.size < uris.distinctBy { it.toString() }.size -> "Načteno ${files.size} médií. Kvůli stabilitě lze najednou zpracovat nejvýše $MAX_SELECTED_MEDIA položek."
+                    skippedNonMedia > 0 -> "Načteno ${files.size} fotografií a videí. Ostatní dokumenty byly přeskočeny."
+                    else -> "Načteno ${files.size} médií. Náhledy se připravují postupně."
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                isError = true
+                status = error.message ?: "Vybraná média se nepodařilo bezpečně načíst."
+            } finally {
+                isImportingMedia = false
             }
         }
     }
@@ -401,6 +495,7 @@ private fun PureCastScreen() {
                 positionInfo = null
                 seekPreviewSeconds = 0f
                 controller.play(device, streamUrl, file)
+                selectedTab = PureCastTab.PLAYBACK
                 status = "Příkaz k přehrání byl odeslán do ${device.friendlyName}. " + compatibilityNote
             } catch (error: Exception) {
                 playingDevice = null
@@ -502,6 +597,7 @@ private fun PureCastScreen() {
                 playingSharedEntryId = null
                 transportInfo = null
                 positionInfo = null
+                selectedTab = PureCastTab.PLAYBACK
                 status = "Odkaz pro TV prohlížeč je připraven. Otevři jej přímo na televizi."
             } catch (error: Exception) {
                 isError = true
@@ -636,6 +732,7 @@ private fun PureCastScreen() {
                 playingDevice = device
                 playingFile = null
                 playingTitle = entry.title
+                selectedTab = PureCastTab.PLAYBACK
                 playingSharedEntryId = entry.id
                 browserUrl = null
                 transportInfo = null
@@ -689,6 +786,53 @@ private fun PureCastScreen() {
         }
     }
 
+    fun removeSharedParticipant(participant: GroupQueueParticipant) {
+        val credentials = sharedCredentials ?: return
+        if (!credentials.isHost || sharedBusy || participant.isHost) return
+        scope.launch {
+            sharedBusy = true
+            try {
+                val wasPlaying = sharedSnapshot?.entries?.firstOrNull {
+                    it.id == playingSharedEntryId
+                }?.senderParticipantId == participant.id
+                val latest = withContext(Dispatchers.IO) {
+                    GroupQueueClient.removeParticipant(credentials, participant.id, appContext)
+                }
+                sharedSnapshot = latest
+                sharedSyncError = null
+                if (wasPlaying) {
+                    val tvStopConfirmed = playingDevice?.let { device ->
+                        try {
+                            controller.stop(device)
+                            true
+                        } catch (_: Exception) {
+                            false
+                        }
+                    } ?: false
+                    playingDevice = null
+                    playingFile = null
+                    playingTitle = null
+                    playingSharedEntryId = null
+                    browserUrl = null
+                    transportInfo = null
+                    positionInfo = null
+                    status = if (tvStopConfirmed) {
+                        "Telefon ${participant.displayName} byl odebrán. Jeho položky byly odstraněny a TV potvrdila zastavení přehrávání."
+                    } else {
+                        "Telefon ${participant.displayName} byl odebrán a jeho položky byly odstraněny. Zastavení na TV se nepodařilo potvrdit; ověř přehrávání přímo na televizi."
+                    }
+                } else {
+                    status = "Telefon ${participant.displayName} byl odebrán ze skupiny. Jeho položky byly odstraněny."
+                }
+                isError = false
+            } catch (error: Exception) {
+                sharedSyncError = error.message ?: "Telefon se nepodařilo odebrat ze skupiny."
+            } finally {
+                sharedBusy = false
+            }
+        }
+    }
+
     fun playNextSharedEntry() {
         val snapshot = sharedSnapshot ?: return
         val next = GroupQueueLogic.nextEntry(
@@ -715,14 +859,18 @@ private fun PureCastScreen() {
         }
     }
 
-    fun runPlaybackAction(label: String, action: suspend (DlnaDevice) -> Unit) {
+    fun runPlaybackAction(
+        label: String,
+        successMessage: String = label,
+        action: suspend (DlnaDevice) -> Unit
+    ) {
         val device = playingDevice ?: return
         scope.launch {
             busyLabel = label
             isError = false
             try {
                 action(device)
-                status = label
+                status = successMessage
             } catch (error: Exception) {
                 isError = true
                 status = error.message ?: "Příkaz se nepodařil."
@@ -761,11 +909,65 @@ private fun PureCastScreen() {
         )
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+    participantPendingRemoval?.let { participant ->
+        AlertDialog(
+            onDismissRequest = { participantPendingRemoval = null },
+            title = { Text("Odebrat telefon ze skupiny?") },
+            text = {
+                Text(
+                    "Přístupový token ke sdílené frontě bude zrušen a všechny jeho položky budou odstraněny. " +
+                        "Dříve vydané přímé odkazy na soubory ale mohou zůstat platné až šest hodin. " +
+                        "Pokud se právě přehrává jeho soubor, PureCast se pokusí přehrávání zastavit."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        participantPendingRemoval = null
+                        removeSharedParticipant(participant)
+                    },
+                    enabled = !sharedBusy
+                ) { Text("Odebrat telefon") }
+            },
+            dismissButton = {
+                TextButton(onClick = { participantPendingRemoval = null }) {
+                    Text("Zrušit")
+                }
+            }
+        )
+    }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 5.dp
+            ) {
+                PureCastTab.values().forEach { tab ->
+                    NavigationBarItem(
+                        selected = selectedTab == tab,
+                        onClick = { selectedTab = tab },
+                        icon = {
+                            Text(
+                                tab.glyph,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        label = { Text(tab.label, maxLines = 1) },
+                        alwaysShowLabel = true
+                    )
+                }
+            }
+        }
+    ) { scaffoldPadding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(scaffoldPadding),
+            contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+        if (selectedTab == PureCastTab.CONNECT) {
         item {
             Box(
                 modifier = Modifier
@@ -902,99 +1104,173 @@ private fun PureCastScreen() {
                 }
             }
         }
+        }
 
-        item {
-            SectionTitle("Fotky a videa", "Vyber originální soubory z telefonu. PureCast je nebude převádět.")
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Přístup k galerii", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    StatusMessage(
-                        text = galleryAccess.label,
-                        error = !galleryAccess.hasAnyAccess
-                    )
-                    Text(
-                        when (galleryAccess.kind) {
-                            com.admiral456.purecast.permissions.GalleryAccessKind.FULL ->
-                                "PureCast může zobrazit fotky a videa z galerie."
-                            com.admiral456.purecast.permissions.GalleryAccessKind.SELECTED ->
-                                "Android zpřístupní pouze fotky a videa, které jsi vybral. Přístup můžeš kdykoliv změnit."
-                            com.admiral456.purecast.permissions.GalleryAccessKind.IMAGES_ONLY ->
-                                "Přístup je povolen pouze k fotografiím."
-                            com.admiral456.purecast.permissions.GalleryAccessKind.VIDEOS_ONLY ->
-                                "Přístup je povolen pouze k videím."
-                            com.admiral456.purecast.permissions.GalleryAccessKind.NONE ->
-                                "Povol přístup, aby PureCast mohl nabídnout obsah galerie. Bez něj můžeš dál vybírat jednotlivé soubory ručně."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        Button(
-                            onClick = { showGalleryAccessExplanation = true },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
-                        ) {
-                            Text(if (galleryAccess.hasAnyAccess) "Změnit přístup" else "Povolit přístup")
-                        }
-                        OutlinedButton(
-                            onClick = { openGalleryAppSettings() },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
-                        ) {
-                            Text("Nastavení")
-                        }
-                    }
-                    Button(
-                        onClick = { loadDeviceGallery() },
-                        enabled = galleryAccess.hasAnyAccess && !isLoadingDeviceGallery,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp)
+        if (selectedTab == PureCastTab.GALLERY) {
+            item {
+                SectionTitle(
+                    "Galerie",
+                    "Vybraná média na jednom místě. Originální soubory zůstávají beze změny."
+                )
+            }
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(11.dp)
                     ) {
-                        if (isLoadingDeviceGallery) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.width(18.dp).height(18.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Přístup k médiím",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
                             )
-                            Spacer(Modifier.width(8.dp))
-                            Text("Načítám galerii…")
-                        } else {
-                            Text("Načíst fotky a videa z galerie")
+                            Spacer(Modifier.weight(1f))
+                            StatusTag(
+                                when (galleryAccess.kind) {
+                                    com.admiral456.purecast.permissions.GalleryAccessKind.FULL -> "PLNÝ PŘÍSTUP"
+                                    com.admiral456.purecast.permissions.GalleryAccessKind.SELECTED -> "VYBRANÁ MÉDIA"
+                                    com.admiral456.purecast.permissions.GalleryAccessKind.IMAGES_ONLY -> "JEN FOTKY"
+                                    com.admiral456.purecast.permissions.GalleryAccessKind.VIDEOS_ONLY -> "JEN VIDEA"
+                                    com.admiral456.purecast.permissions.GalleryAccessKind.NONE -> "NEPOVOLENO"
+                                },
+                                if (galleryAccess.hasAnyAccess) MaterialTheme.colorScheme.secondary
+                                else MaterialTheme.colorScheme.error
+                            )
                         }
+                        Text(
+                            when (galleryAccess.kind) {
+                                com.admiral456.purecast.permissions.GalleryAccessKind.FULL ->
+                                    "PureCast může zobrazit dostupné fotografie a videa."
+                                com.admiral456.purecast.permissions.GalleryAccessKind.SELECTED ->
+                                    "Zpřístupněna jsou pouze média, která jsi vybral v Androidu."
+                                com.admiral456.purecast.permissions.GalleryAccessKind.IMAGES_ONLY ->
+                                    "Přístup je povolen pouze k fotografiím."
+                                com.admiral456.purecast.permissions.GalleryAccessKind.VIDEOS_ONLY ->
+                                    "Přístup je povolen pouze k videím."
+                                com.admiral456.purecast.permissions.GalleryAccessKind.NONE ->
+                                    "Můžeš povolit přístup ke galerii, nebo vybrat jednotlivé soubory bez něj."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    mediaPicker.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+                                    )
+                                },
+                                enabled = !isImportingMedia,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(13.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 11.dp)
+                            ) {
+                                Text("Vybrat média")
+                            }
+                            OutlinedButton(
+                                onClick = { documentPicker.launch(arrayOf("*/*")) },
+                                enabled = !isImportingMedia,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(13.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 11.dp)
+                            ) {
+                                Text("Soubory")
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(7.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { loadDeviceGallery() },
+                                enabled = galleryAccess.hasAnyAccess && !isLoadingDeviceGallery && !isImportingMedia,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 5.dp, vertical = 9.dp)
+                            ) {
+                                if (isLoadingDeviceGallery) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(15.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(Modifier.width(5.dp))
+                                }
+                                Text(if (isLoadingDeviceGallery) "Načítám…" else "Načíst galerii")
+                            }
+                            OutlinedButton(
+                                onClick = { showGalleryAccessExplanation = true },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 5.dp, vertical = 9.dp)
+                            ) {
+                                Text(if (galleryAccess.hasAnyAccess) "Oprávnění" else "Povolit")
+                            }
+                            OutlinedButton(
+                                onClick = { openGalleryAppSettings() },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 5.dp, vertical = 9.dp)
+                            ) {
+                                Text("Nastavení")
+                            }
+                        }
+                        if (isImportingMedia || isLoadingDeviceGallery) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(17.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(Modifier.width(9.dp))
+                                Text(
+                                    if (isLoadingDeviceGallery) "Procházím dostupná média…"
+                                    else "Bezpečně načítám vybraná média…",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        if (status != "Připoj telefon a televizi ke stejné Wi-Fi síti.") {
+                            StatusMessage(status, isError)
+                        }
+                        Text(
+                            "Náhledy slouží jen k orientaci. Do televize se předává původní soubor bez překódování.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                    OutlinedButton(
-                        onClick = {
-                            mediaPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Text("＋  Vybrat fotky a videa")
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            documentPicker.launch(arrayOf("*/*"))
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Text("＋  Procházet soubory a další formáty")
-                    }
-                    Text(
-                        "Rozpoznáváme JPG/JPEG, PNG, GIF, WebP, HEIC/HEIF, AVIF, JPEG XL, TIFF, BMP, SVG, JPEG 2000, RAW, FITS, OpenEXR, DDS a KTX. Náhled závisí na Androidu a zobrazení na podpoře televize; originál nijak neupravujeme.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                }
+            }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Vybrané soubory", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.weight(1f))
-                        StatusTag("${selectedFiles.size} / $MAX_SELECTED_MEDIA", MaterialTheme.colorScheme.secondary)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Moje knihovna",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "${selectedFiles.count { it.isImage }} fotek · ${selectedFiles.count { it.isVideo }} videí",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        StatusTag(
+                            "${selectedFiles.size} / $MAX_SELECTED_MEDIA",
+                            MaterialTheme.colorScheme.secondary
+                        )
                     }
                     if (selectedFiles.isNotEmpty()) {
                         OutlinedTextField(
@@ -1002,10 +1278,10 @@ private fun PureCastScreen() {
                             onValueChange = { mediaSearchQuery = it },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            label = { Text("Hledat podle názvu") },
-                            placeholder = { Text("Např. dovolená nebo video") }
+                            label = { Text("Hledat v knihovně") },
+                            placeholder = { Text("Název fotografie nebo videa") }
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                             FilterChip(
                                 selected = mediaKindFilter == MediaKindFilter.ALL,
                                 onClick = { mediaKindFilter = MediaKindFilter.ALL },
@@ -1023,7 +1299,11 @@ private fun PureCastScreen() {
                             )
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Seřadit:", style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                "Řazení",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                             Box {
                                 TextButton(onClick = { showSortMenu = true }) {
                                     Text(mediaSort.label)
@@ -1056,7 +1336,6 @@ private fun PureCastScreen() {
                             )
                         }
                         if (availableAlbums.isNotEmpty()) {
-                            Text("Alba", style = MaterialTheme.typography.labelLarge)
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 item(key = "__all_albums__") {
                                     FilterChip(
@@ -1075,146 +1354,76 @@ private fun PureCastScreen() {
                             }
                         }
                     }
-                    if (selectedFiles.isEmpty()) {
-                        EmptyState("Zatím tu nic není", "Vyber jednu nebo více fotek či videí a potom je odešli do televize.")
-                    } else if (visibleFiles.isEmpty()) {
-                        EmptyState("Nic nenalezeno", "Zkus upravit hledaný název nebo zvolit jiný filtr.")
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxWidth().heightIn(max = 600.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            items(visibleFiles, key = { it.uri.toString() }) { file ->
-                                Card(
-                                        shape = RoundedCornerShape(15.dp),
-                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                    ) {
-                                        Column(modifier = Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Row(
-                                                verticalAlignment = Alignment.Top,
-                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                            ) {
-                                                MediaThumbnail(file)
-                                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        Surface(
-                                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                                            shape = RoundedCornerShape(11.dp)
-                                                        ) {
-                                                            Text(
-                                                                if (file.isImage) "FOTO" else if (file.isVideo) "VIDEO" else "SOUBOR",
-                                                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
-                                                                color = MaterialTheme.colorScheme.primary,
-                                                                style = MaterialTheme.typography.labelSmall,
-                                                                fontWeight = FontWeight.Bold
-                                                            )
-                                                        }
-                                                        Spacer(Modifier.weight(1f))
-                                                        TextButton(
-                                                            onClick = {
-                                                                selectedFiles.remove(file)
-                                                                technicalInfo.remove(file.uri.toString())
-                                                                val queuedIndex = playbackQueue.indexOfFirst { it.uri == file.uri }
-                                                                if (queuedIndex >= 0) removeFromQueue(queuedIndex)
-                                                            },
-                                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
-                                                        ) { Text("Odebrat") }
-                                                    }
-                                                    Text(
-                                                        file.displayName,
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        maxLines = 2,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                    Text(
-                                                        "${file.mimeType}  ·  ${formatSize(file.sizeBytes)}",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                    technicalInfo[file.uri.toString()]?.let { info ->
-                                                        val technicalParts = listOfNotNull(
-                                                            info.resolutionLabel(),
-                                                            info.frameRate?.let { String.format(Locale.US, "%.2f FPS", it) },
-                                                            info.videoMimeType,
-                                                            info.audioMimeTypes.firstOrNull(),
-                                                            info.bitrateBitsPerSecond?.let(::formatBitrate),
-                                                            info.durationMillis?.let { "Délka " + formatPlaybackTime(it / 1_000L) },
-                                                            if (file.isVideo) "HDR " + (info.hdrLabel ?: "neověřeno") else null
-                                                        )
-                                                        if (technicalParts.isNotEmpty()) {
-                                                            Text(
-                                                                technicalParts.joinToString(" · "),
-                                                                style = MaterialTheme.typography.labelSmall,
-                                                                color = MaterialTheme.colorScheme.secondary,
-                                                                maxLines = 2,
-                                                                overflow = TextOverflow.Ellipsis
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                                Button(
-                                                    onClick = {
-                                                        val device = activeDevice
-                                                        if (device == null) {
-                                                            isError = true
-                                                            status = "Nejdříve vyber nebo vyhledej DLNA televizor."
-                                                        } else {
-                                                            playOn(device, file)
-                                                        }
-                                                    },
-                                                    enabled = activeDevice != null && busyLabel == null && file.isPlayableMedia,
-                                                    modifier = Modifier.weight(1f),
-                                                    shape = RoundedCornerShape(12.dp),
-                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
-                                                ) {
-                                                    if (busyLabel == file.displayName) {
-                                                        CircularProgressIndicator(
-                                                            modifier = Modifier.width(17.dp).height(17.dp),
-                                                            strokeWidth = 2.dp,
-                                                            color = MaterialTheme.colorScheme.onPrimary
-                                                        )
-                                                        Spacer(Modifier.width(7.dp))
-                                                    }
-                                                    Text("DLNA")
-                                                }
-                                                OutlinedButton(
-                                                    onClick = { prepareBrowser(file) },
-                                                    enabled = busyLabel == null && file.isPlayableMedia,
-                                                    modifier = Modifier.weight(1f),
-                                                    shape = RoundedCornerShape(12.dp),
-                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
-                                                ) {
-                                                    Text("Prohlížeč TV")
-                                                }
-                                            }
-                                            TextButton(
-                                                onClick = { addToQueue(file) },
-                                                enabled = file.isPlayableMedia && playbackQueue.none { it.uri == file.uri },
-                                                modifier = Modifier.fillMaxWidth()
-                                            ) {
-                                                Text(if (playbackQueue.any { it.uri == file.uri }) "✓ Ve frontě" else "＋ Přidat do fronty")
-                                            }
-                                            if (sharedCredentials != null) {
-                                                TextButton(
-                                                    onClick = { addToSharedQueue(file) },
-                                                    enabled = !sharedBusy && file.isPlayableMedia,
-                                                    modifier = Modifier.fillMaxWidth()
-                                                ) {
-                                                    Text("＋ Přidat do sdílené fronty")
-                                                }
-                                            }
-                                            }
-                                        }
+                }
+            }
+            if (selectedFiles.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        EmptyState(
+                            "Knihovna je zatím prázdná",
+                            "Vyber fotky nebo videa. Po načtení se zobrazí přehledně v mřížce."
+                        )
+                    }
+                }
+            } else if (visibleFiles.isEmpty()) {
+                item {
+                    EmptyState(
+                        "Nic nenalezeno",
+                        "Uprav hledaný název, filtr typu média nebo výběr alba."
+                    )
+                }
+            } else {
+                items(
+                    visibleFiles.chunked(2),
+                    key = { row -> row.joinToString("|") { it.uri.toString() } }
+                ) { row ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        row.forEach { file ->
+                            MediaGalleryTile(
+                                media = file,
+                                modifier = Modifier.weight(1f),
+                                canPlayOnTv = activeDevice != null,
+                                isBusy = busyLabel != null || isImportingMedia,
+                                isQueued = playbackQueue.any { it.uri == file.uri },
+                                canAddToSharedQueue = sharedCredentials != null,
+                                onPlay = {
+                                    val device = activeDevice
+                                    if (device == null) {
+                                        status = "Nejdříve připoj televizi v části Připojit."
+                                        isError = true
+                                        selectedTab = PureCastTab.CONNECT
+                                    } else {
+                                        playOn(device, file)
                                     }
-                            }
+                                },
+                                onPlayInBrowser = { prepareBrowser(file) },
+                                onQueue = { addToQueue(file) },
+                                onShare = { addToSharedQueue(file) },
+                                onRemove = {
+                                    selectedFiles.remove(file)
+                                    selectedAlbum = MediaLibraryFilter.retainAvailableAlbumSelection(
+                                        selectedFiles,
+                                        selectedAlbum
+                                    ) { it.albumName }
+                                    val queuedIndex = playbackQueue.indexOfFirst { it.uri == file.uri }
+                                    if (queuedIndex >= 0) removeFromQueue(queuedIndex)
+                                }
+                            )
                         }
+                        if (row.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
             }
+        }
 
+        if (selectedTab == PureCastTab.QUEUE) {
         if (playbackQueue.isNotEmpty()) {
             item {
                 SectionTitle("Fronta přehrávání", "Připrav si pořadí médií a přepínej mezi nimi bez nového výběru.")
@@ -1313,6 +1522,20 @@ private fun PureCastScreen() {
                     }
                 }
             }
+        } else {
+            item {
+                SectionTitle("Fronta přehrávání", "Zde najdeš média, která chceš přehrát za sebou.")
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    EmptyState(
+                        "Fronta je prázdná",
+                        "Otevři galerii, vyber fotky nebo videa a přidej je do fronty."
+                    )
+                }
+            }
         }
 
         item {
@@ -1380,6 +1603,33 @@ private fun PureCastScreen() {
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold
                         )
+                        if (credentials.isHost) {
+                            val connectedPhones = snapshot?.participants?.filterNot { it.isHost }.orEmpty()
+                            Text("Připojené telefony", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                            if (connectedPhones.isEmpty()) {
+                                Text(
+                                    "Zatím není připojený žádný další telefon.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            } else {
+                                connectedPhones.forEach { participant ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(participant.displayName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                            Text("Připojený účastník", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        TextButton(
+                                            onClick = { participantPendingRemoval = participant },
+                                            enabled = !sharedBusy
+                                        ) { Text("Odebrat") }
+                                    }
+                                }
+                            }
+                        }
                         if (credentials.isHost) {
                             Text("Adresa: ${credentials.baseUrl}", style = MaterialTheme.typography.bodySmall)
                             Text("Pozvánkový kód: ${credentials.inviteCode}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -1479,6 +1729,9 @@ private fun PureCastScreen() {
             }
         }
 
+        }
+
+        if (selectedTab == PureCastTab.PLAYBACK) {
         if (playingTitle != null) {
             item {
                 SectionTitle("Přehrávání", "Vyber režim přehrávání podle možností své televize.")
@@ -1490,6 +1743,52 @@ private fun PureCastScreen() {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(playingTitle.orEmpty(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(playingDevice?.friendlyName ?: "Režim prohlížeče televize", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(
+                            modifier = Modifier.fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Živý přenos dat", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.weight(1f))
+                                StatusTag(
+                                    if (transferStats.activeTransfers > 0) "PŘENÁŠÍ SE" else "BEZ AKTIVNÍHO PŘENOSU",
+                                    if (transferStats.activeTransfers > 0) MaterialTheme.colorScheme.secondary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Aktuální odesílání", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.weight(1f))
+                                Text(
+                                    formatTransferSpeed(transferStats.currentBytesPerSecond),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Text(
+                                "Odesláno od spuštění serveru: ${formatSize(transferStats.totalBytesSent)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "Současná spojení: ${transferStats.activeTransfers} · maximum: ${transferStats.peakConcurrentTransfers}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "Dokončeno: ${transferStats.completedTransfers} · přerušeno: ${transferStats.interruptedTransfers}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "Rychlost měří data předaná výstupu aplikace. Není to zaručená rychlost Wi-Fi ani potvrzení, že televize video dekóduje.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         if (playingDevice != null) {
                         if (playingSharedEntryId != null) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1529,13 +1828,13 @@ private fun PureCastScreen() {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
                                 onClick = { runPlaybackAction("Přehrávání pozastaveno.") { controller.pause(it) } },
-                                enabled = busyLabel == null,
+                                enabled = busyLabel == null && !playbackHealth.isTransportUnresponsive && PlaybackControlAvailability.canPause(transportInfo?.state),
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                             ) { Text("Pozastavit") }
                             OutlinedButton(
                                 onClick = { runPlaybackAction("Pokračuji v přehrávání.") { controller.resume(it) } },
-                                enabled = busyLabel == null,
+                                enabled = busyLabel == null && !playbackHealth.isTransportUnresponsive && PlaybackControlAvailability.canResume(transportInfo?.state),
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                             ) { Text("Pokračovat") }
@@ -1553,23 +1852,36 @@ private fun PureCastScreen() {
                                         positionInfo = null
                                     }
                                 },
-                                enabled = busyLabel == null,
+                                enabled = busyLabel == null && !playbackHealth.isTransportUnresponsive && PlaybackControlAvailability.canStop(transportInfo?.state),
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                             ) { Text("Zastavit") }
                         }
                         OutlinedButton(
                             onClick = {
-                                runPlaybackAction("Stahuji stav z televize…") {
+                                runPlaybackAction(
+                                    "Aktualizuji stav televize…",
+                                    "Stav televize byl aktualizován."
+                                ) {
                                     transportInfo = controller.getTransportInfo(it)
+                                    playbackHealth = PlaybackConnectionHealthPolicy.transportSucceeded(playbackHealth)
                                     positionInfo = controller.getPositionInfo(it)
+                                    playbackHealth = PlaybackConnectionHealthPolicy.positionSucceeded(playbackHealth)
                                     seekPreviewSeconds = positionInfo?.positionSeconds?.toFloat() ?: 0f
-                                    status = "Stav televize byl aktualizován."
+                                    isSeekingPlayback = false
                                 }
                             },
                             enabled = busyLabel == null,
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text("Obnovit stav přehrávání") }
+                        ) { Text("Aktualizovat stav teď") }
+                        Text(
+                            "Stav televize a čas videa se obnovují automaticky přibližně každé 3 sekundy.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        playbackHealth.warningMessage?.let { warning ->
+                            StatusMessage(warning, error = true)
+                        }
                         transportInfo?.let {
                             StatusMessage(
                                 text = "Stav: ${it.state.replace('_', ' ')} · ${it.status}",
@@ -1587,10 +1899,14 @@ private fun PureCastScreen() {
                                 )
                                 Slider(
                                     value = seekPreviewSeconds.coerceIn(0f, maxPosition),
-                                    onValueChange = { seekPreviewSeconds = it },
+                                    onValueChange = {
+                                        seekPreviewSeconds = it
+                                        isSeekingPlayback = true
+                                    },
                                     valueRange = 0f..maxPosition,
-                                    enabled = busyLabel == null,
+                                    enabled = busyLabel == null && !playbackHealth.isPositionUnavailable,
                                     onValueChangeFinished = {
+                                        isSeekingPlayback = false
                                         val target = seekPreviewSeconds.toLong().coerceIn(0L, duration)
                                         runPlaybackAction("Posouvám video na " + formatPlaybackTime(target)) {
                                             controller.seekToSeconds(it, target)
@@ -1648,8 +1964,35 @@ private fun PureCastScreen() {
                     }
                 }
             }
+        } else {
+            item {
+                SectionTitle("Přehrávání", "Tady najdeš stav přenosu a ovládání vybraného média.")
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        EmptyState(
+                            "Zatím se nic nepřehrává",
+                            "Nejprve vyber média a připoj televizi. Stav přenosu se zobrazí právě tady."
+                        )
+                        Button(
+                            onClick = { selectedTab = PureCastTab.GALLERY },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp)
+                        ) { Text("Otevřít galerii") }
+                    }
+                }
+            }
+        }
         }
 
+        if (selectedTab == PureCastTab.CONNECT) {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1666,27 +2009,141 @@ private fun PureCastScreen() {
                 }
             }
         }
+        }
+    }
+}
+
+}
+
+private val mediaThumbnailDispatcher = Dispatchers.IO.limitedParallelism(1)
+
+@Composable
+private fun MediaGalleryTile(
+    media: MediaFile,
+    modifier: Modifier = Modifier,
+    canPlayOnTv: Boolean,
+    isBusy: Boolean,
+    isQueued: Boolean,
+    canAddToSharedQueue: Boolean,
+    onPlay: () -> Unit,
+    onPlayInBrowser: () -> Unit,
+    onQueue: () -> Unit,
+    onShare: () -> Unit,
+    onRemove: () -> Unit
+) {
+    var menuExpanded by remember(media.uri) { mutableStateOf(false) }
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier.padding(9.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Box {
+                MediaThumbnail(
+                    media = media,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(112.dp)
+                )
+                Box(modifier = Modifier.align(Alignment.TopStart).padding(7.dp)) {
+                    StatusTag(
+                        if (media.isVideo) "VIDEO" else "FOTO",
+                        MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            Text(
+                media.displayName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                minLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                "${media.mimeType.substringAfter('/', media.mimeType)} · ${formatSize(media.sizeBytes)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Button(
+                onClick = onPlay,
+                enabled = !isBusy && media.isPlayableMedia,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(11.dp),
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
+            ) {
+                Text(if (canPlayOnTv) "Přehrát na TV" else "Připojit TV")
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(
+                    onClick = onQueue,
+                    enabled = !isQueued && media.isPlayableMedia && !isBusy,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 2.dp, vertical = 3.dp)
+                ) {
+                    Text(if (isQueued) "Ve frontě" else "+ Fronta", maxLines = 1)
+                }
+                Box {
+                    TextButton(
+                        onClick = { menuExpanded = true },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 3.dp)
+                    ) {
+                        Text("Další")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Přehrát v prohlížeči TV") },
+                            onClick = {
+                                menuExpanded = false
+                                onPlayInBrowser()
+                            },
+                            enabled = media.isPlayableMedia && !isBusy
+                        )
+                        if (canAddToSharedQueue) {
+                            DropdownMenuItem(
+                                text = { Text("Přidat do sdílené fronty") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onShare()
+                                },
+                                enabled = media.isPlayableMedia && !isBusy
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text("Odebrat z knihovny") },
+                            onClick = {
+                                menuExpanded = false
+                                onRemove()
+                            }
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun MediaThumbnail(media: MediaFile) {
+private fun MediaThumbnail(media: MediaFile, modifier: Modifier = Modifier.size(82.dp)) {
     val context = LocalContext.current
     val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = media.uri) {
-        value = withContext(Dispatchers.IO) {
+        value = withContext(mediaThumbnailDispatcher) {
             MediaThumbnailLoader.load(context, media)
         }
     }
-    DisposableEffect(bitmap) {
-        onDispose {
-            bitmap?.let { thumbnail ->
-                if (!thumbnail.isRecycled) thumbnail.recycle()
-            }
-        }
-    }
     Box(
-        modifier = Modifier
-            .size(82.dp)
+        modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center
@@ -1755,6 +2212,12 @@ private fun EmptyState(title: String, body: String) {
 
 private fun formatPlaybackTime(seconds: Long?): String =
     seconds?.let(UpnpTime::formatSeconds) ?: "--:--:--"
+
+private fun formatTransferSpeed(bytesPerSecond: Long): String {
+    val megabits = bytesPerSecond.coerceAtLeast(0L) * 8.0 / 1_000_000.0
+    val mebibytes = bytesPerSecond.coerceAtLeast(0L) / (1024.0 * 1024.0)
+    return String.format(Locale.US, "%.1f Mb/s · %.1f MiB/s", megabits, mebibytes)
+}
 
 private fun formatBitrate(bitsPerSecond: Long): String {
     val megabits = bitsPerSecond / 1_000_000.0

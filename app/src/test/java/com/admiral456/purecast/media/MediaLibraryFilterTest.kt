@@ -92,6 +92,34 @@ class MediaLibraryFilterTest {
     }
 
     @Test
+    fun selectedAlbumIsRetainedWhileItHasItemsAndClearedAfterLastRemoval() {
+        val holiday = entry("holiday.jpg", album = "Dovolená")
+        val work = entry("work.jpg", album = "Práce")
+
+        assertEquals(
+            "dovolená",
+            MediaLibraryFilter.retainAvailableAlbumSelection(
+                listOf(holiday, work),
+                "dovolená"
+            ) { it.album }
+        )
+        assertEquals(
+            null,
+            MediaLibraryFilter.retainAvailableAlbumSelection(
+                listOf(work),
+                "dovolená"
+            ) { it.album }
+        )
+        assertEquals(
+            null,
+            MediaLibraryFilter.retainAvailableAlbumSelection(
+                emptyList<TestEntry>(),
+                "dovolená"
+            ) { it.album }
+        )
+    }
+
+    @Test
     fun blankSearchMatchesEveryItemInSelectedKind() {
         assertTrue(MediaLibraryFilter.matches("photo.jpg", "image/jpeg", "   ", MediaKindFilter.ALL))
     }

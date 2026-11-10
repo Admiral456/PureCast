@@ -1,18 +1,15 @@
 package com.admiral456.purecast.server
 
 import android.content.Context
-import android.net.ConnectivityManager
 import android.net.Uri
 import com.admiral456.purecast.media.MediaFile
 import com.admiral456.purecast.network.WifiNetworkResolver
 import java.io.BufferedOutputStream
-import java.io.ByteArrayOutputStream
 import java.io.Closeable
 import java.io.IOException
-import java.io.InputStream
+import java.io.OutputStream
 import java.net.Inet4Address
 import java.net.InetSocketAddress
-import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.ArrayBlockingQueue
@@ -23,6 +20,24 @@ import java.util.concurrent.ThreadFactory
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 
+private class TransferCountingOutputStream(
+    private val delegate: OutputStream,
+    private val onBytesWritten: (Long) -> Unit
+) : OutputStream() {
+    override fun write(value: Int) {
+        delegate.write(value)
+        onBytesWritten(1L)
+    }
+
+    override fun write(buffer: ByteArray, offset: Int, length: Int) {
+        if (length <= 0) return
+        delegate.write(buffer, offset, length)
+        onBytesWritten(length.toLong())
+    }
+
+    override fun flush() = delegate.flush()
+}
+
 private data class PublishedMedia(
     val media: MediaFile,
     val expiresAtMillis: Long
@@ -30,10 +45,13 @@ private data class PublishedMedia(
 
 class LocalMediaServer(private val context: Context) : Closeable {
     private val mediaByToken = ConcurrentHashMap<String, PublishedMedia>()
+    private val transferMetrics = TransferMetrics()
+
+    internal fun transferStats(): TransferMetricsSnapshot = transferMetrics.snapshot()
     private val clientSockets = ConcurrentHashMap.newKeySet<Socket>()
     private val clientExecutor: ExecutorService = ThreadPoolExecutor(
-        MIN_CLIENT_THREADS,
-        MAX_CLIENT_THREADS,
+        CLIENT_THREADS,
+        CLIENT_THREADS,
         CLIENT_KEEP_ALIVE_SECONDS,
         TimeUnit.SECONDS,
         ArrayBlockingQueue(MAX_QUEUED_CLIENTS),
@@ -41,7 +59,11 @@ class LocalMediaServer(private val context: Context) : Closeable {
             Thread(task, "PureCast-HTTP-client").apply { isDaemon = true }
         },
         ThreadPoolExecutor.AbortPolicy()
-    )
+    ).apply {
+        // Grow to the full bounded worker count immediately during request bursts,
+        // then release idle workers after the keep-alive interval.
+        allowCoreThreadTimeOut(true)
+    }
     @Volatile private var serverSocket: ServerSocket? = null
     @Volatile private var acceptThread: Thread? = null
     @Volatile private var boundAddress: Inet4Address? = null
@@ -49,7 +71,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
     @Synchronized
     fun publish(media: MediaFile): String {
         val address = findLocalIpv4()
-            ?: throw IllegalStateException("Telefon není připojený k použitelné místní IPv4 síti.")
+            ?: throw IllegalStateException("Telefon není připojený k použitelné místní Wi-Fi, hotspot nebo Ethernet IPv4 síti.")
         val server = ensureServer(address)
         val token = MediaTokenGenerator.create()
         mediaByToken[token] = PublishedMedia(media, System.currentTimeMillis() + TOKEN_LIFETIME_MS)
@@ -96,6 +118,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
         while (!server.isClosed) {
             try {
                 val client = server.accept()
+                configureAcceptedSocket(client)
                 clientSockets.add(client)
                 try {
                     clientExecutor.execute {
@@ -124,34 +147,30 @@ class LocalMediaServer(private val context: Context) : Closeable {
         }
     }
 
+    private fun configureAcceptedSocket(socket: Socket) {
+        // Increase the kernel TCP send window for high-bitrate local video streams.
+        // The OS may clamp this value; failure is non-fatal and the default remains usable.
+        try {
+            socket.sendBufferSize = SOCKET_SEND_BUFFER_SIZE
+        } catch (_: Exception) {
+        }
+    }
+
     private fun handleClient(socket: Socket) {
         socket.use { client ->
             client.soTimeout = 20_000
-            val headerBytes = ByteArrayOutputStream()
-            var matched = 0
-            val terminator = byteArrayOf(13, 10, 13, 10)
-            val input = client.getInputStream()
-
-            while (headerBytes.size() < MAX_HEADER_BYTES) {
-                val next = input.read()
-                if (next < 0) return
-                headerBytes.write(next)
-                matched = when {
-                    next == terminator[matched].toInt() -> matched + 1
-                    next == 13 -> 1
-                    else -> 0
-                }
-                if (matched == terminator.size) break
-            }
-            if (matched != terminator.size) {
+            val parsedRequest = try {
+                MediaRequestParser.read(client.getInputStream(), MAX_HEADER_BYTES)
+            } catch (_: MediaRequestParser.HeadersTooLarge) {
                 writeSimpleResponse(client, 431, "Request Header Fields Too Large")
                 return
-            }
+            } catch (_: IOException) {
+                writeSimpleResponse(client, 400, "Bad Request")
+                return
+            } ?: return
 
-            val lines = String(headerBytes.toByteArray(), Charsets.ISO_8859_1).split("\r\n")
-            val request = lines.firstOrNull()?.split(' ') ?: return
-            val method = request.getOrNull(0)?.uppercase().orEmpty()
-            val target = request.getOrNull(1).orEmpty()
+            val method = parsedRequest.method
+            val target = parsedRequest.target
             if (method != "GET" && method != "HEAD") {
                 writeSimpleResponse(client, 405, "Method Not Allowed")
                 return
@@ -176,12 +195,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
                 return
             }
 
-            val headers = lines.drop(1).mapNotNull { line ->
-                val colon = line.indexOf(':')
-                if (colon <= 0) null else {
-                    line.substring(0, colon).trim().lowercase() to line.substring(colon + 1).trim()
-                }
-            }.toMap()
+            val headers = parsedRequest.headers
 
             val asset = try {
                 context.contentResolver.openAssetFileDescriptor(published.media.uri, "r")
@@ -206,7 +220,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
                 } else null
 
                 if (isByteRange && totalLength > 0L && range == null) {
-                    val output = BufferedOutputStream(client.getOutputStream())
+                    val output = BufferedOutputStream(client.getOutputStream(), OUTPUT_BUFFER_SIZE)
                     output.write(
                         ("HTTP/1.1 416 Range Not Satisfiable\r\n" +
                             "Content-Range: bytes */$totalLength\r\n" +
@@ -219,7 +233,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
                 val start = range?.start ?: 0L
                 val contentLength = range?.length ?: totalLength
                 val status = if (range != null) "206 Partial Content" else "200 OK"
-                val output = BufferedOutputStream(client.getOutputStream())
+                val output = BufferedOutputStream(client.getOutputStream(), OUTPUT_BUFFER_SIZE)
                 val response = StringBuilder()
                     .append("HTTP/1.1 ").append(status).append("\r\n")
                     .append("Content-Type: ").append(safeContentType(published.media.mimeType)).append("\r\n")
@@ -240,15 +254,25 @@ class LocalMediaServer(private val context: Context) : Closeable {
                 output.flush()
 
                 if (method == "HEAD") return
-                descriptor.createInputStream().use { stream ->
-                    skipFully(stream, start)
-                    if (contentLength >= 0L) {
-                        copyExactly(stream, output, contentLength)
-                    } else {
-                        stream.copyTo(output, BUFFER_SIZE)
+                transferMetrics.transferStarted()
+                var transferCompleted = false
+                try {
+                    descriptor.createInputStream().use { stream ->
+                        val mediaOutput = TransferCountingOutputStream(output) { bytes ->
+                            transferMetrics.bytesSent(bytes)
+                        }
+                        StreamTransfer.skipFully(stream, start)
+                        if (contentLength >= 0L) {
+                            StreamTransfer.copyExactly(stream, mediaOutput, contentLength, BUFFER_SIZE)
+                        } else {
+                            StreamTransfer.copyToEnd(stream, mediaOutput, BUFFER_SIZE)
+                        }
                     }
+                    output.flush()
+                    transferCompleted = true
+                } finally {
+                    transferMetrics.transferFinished(completed = transferCompleted)
                 }
-                output.flush()
             }
         }
     }
@@ -368,7 +392,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
             </body>
             </html>
         """.trimIndent().toByteArray(Charsets.UTF_8)
-        val output = BufferedOutputStream(socket.getOutputStream())
+        val output = BufferedOutputStream(socket.getOutputStream(), OUTPUT_BUFFER_SIZE)
         output.write(
             ("HTTP/1.1 200 OK\r\n" +
                 "Content-Type: text/html; charset=utf-8\r\n" +
@@ -381,32 +405,8 @@ class LocalMediaServer(private val context: Context) : Closeable {
         output.flush()
     }
 
-    private fun skipFully(input: InputStream, bytes: Long) {
-        var remaining = bytes
-        while (remaining > 0L) {
-            val skipped = input.skip(remaining)
-            if (skipped > 0L) {
-                remaining -= skipped
-            } else {
-                if (input.read() < 0) throw IOException("Soubor skončil před požadovaným rozsahem.")
-                remaining--
-            }
-        }
-    }
-
-    private fun copyExactly(input: InputStream, output: BufferedOutputStream, length: Long) {
-        var remaining = length
-        val buffer = ByteArray(BUFFER_SIZE)
-        while (remaining > 0L) {
-            val read = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
-            if (read < 0) throw IOException("Zdrojový soubor skončil před koncem přenosu.")
-            output.write(buffer, 0, read)
-            remaining -= read
-        }
-    }
-
     private fun writeSimpleResponse(socket: Socket, status: Int, reason: String) {
-        val output = BufferedOutputStream(socket.getOutputStream())
+        val output = BufferedOutputStream(socket.getOutputStream(), OUTPUT_BUFFER_SIZE)
         val response = "HTTP/1.1 $status $reason" +
             "\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
         output.write(response.toByteArray(Charsets.US_ASCII))
@@ -434,44 +434,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
         mediaByToken.entries.removeAll { it.value.expiresAtMillis < now }
     }
 
-    private fun findLocalIpv4(): Inet4Address? {
-        WifiNetworkResolver.activeWifiIpv4(context)?.let { return it }
-        val candidates = mutableListOf<Pair<Int, Inet4Address>>()
-        val interfaces = NetworkInterface.getNetworkInterfaces()
-        if (interfaces != null) {
-            while (interfaces.hasMoreElements()) {
-                val networkInterface = interfaces.nextElement()
-                if (!networkInterface.isUp || networkInterface.isLoopback) continue
-                val preference = when {
-                    networkInterface.name.startsWith("wlan", true) -> 0
-                    networkInterface.name.startsWith("wifi", true) -> 1
-                    networkInterface.name.startsWith("ap", true) -> 2
-                    networkInterface.name.startsWith("eth", true) -> 3
-                    else -> 5
-                }
-                if (networkInterface.name.startsWith("tun", true) ||
-                    networkInterface.name.startsWith("ppp", true) ||
-                    networkInterface.name.startsWith("rmnet", true)
-                ) continue
-                val addresses = networkInterface.inetAddresses
-                while (addresses.hasMoreElements()) {
-                    val address = addresses.nextElement()
-                    if (address is Inet4Address && address.isSiteLocalAddress && !address.isLoopbackAddress) {
-                        candidates.add(preference to address)
-                    }
-                }
-            }
-        }
-        candidates.minByOrNull { it.first }?.second?.let { return it }
-
-        val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val properties = connectivity.activeNetwork?.let(connectivity::getLinkProperties)
-        return properties?.linkAddresses
-            ?.asSequence()
-            ?.map { it.address }
-            ?.filterIsInstance<Inet4Address>()
-            ?.firstOrNull { it.isSiteLocalAddress && !it.isLoopbackAddress }
-    }
+    private fun findLocalIpv4(): Inet4Address? = WifiNetworkResolver.localLanIpv4(context)
 
     override fun close() {
         try {
@@ -494,10 +457,11 @@ class LocalMediaServer(private val context: Context) : Closeable {
 
     companion object {
         private const val MAX_HEADER_BYTES = 16_384
-        private const val BUFFER_SIZE = 64 * 1024
-        private const val MIN_CLIENT_THREADS = 2
-        private const val MAX_CLIENT_THREADS = 8
-        private const val MAX_QUEUED_CLIENTS = 32
+        private const val BUFFER_SIZE = StreamTransfer.DEFAULT_BUFFER_SIZE
+        private const val OUTPUT_BUFFER_SIZE = 64 * 1024
+        private const val SOCKET_SEND_BUFFER_SIZE = 512 * 1024
+        private const val CLIENT_THREADS = 8
+        private const val MAX_QUEUED_CLIENTS = 16
         private const val CLIENT_KEEP_ALIVE_SECONDS = 30L
         private const val TOKEN_LIFETIME_MS = 6 * 60 * 60 * 1_000L
         private val MEDIA_PATH = Regex("^/(media|tv)/([A-Za-z0-9_-]{12})$")

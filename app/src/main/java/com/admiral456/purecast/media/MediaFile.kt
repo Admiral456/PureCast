@@ -36,13 +36,7 @@ data class MediaFile(
             var name = uri.lastPathSegment?.substringAfterLast('/') ?: "media"
             var size: Long? = null
 
-            resolver.query(
-                uri,
-                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
-                null,
-                null,
-                null
-            )?.use { cursor ->
+            safeQuery(context, uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE))?.use { cursor ->
                 if (cursor.moveToFirst()) {
                     val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                     val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
@@ -57,17 +51,8 @@ data class MediaFile(
                 MediaStore.MediaColumns.DATE_MODIFIED,
                 MediaStore.Images.ImageColumns.BUCKET_DISPLAY_NAME
             )
-            val metadataCursor = runCatching {
-                resolver.query(uri, metadataProjection, null, null, null)
-            }.getOrNull() ?: runCatching {
-                resolver.query(
-                    uri,
-                    arrayOf(MediaStore.MediaColumns.DATE_MODIFIED),
-                    null,
-                    null,
-                    null
-                )
-            }.getOrNull()
+            val metadataCursor = safeQuery(context, uri, metadataProjection)
+                ?: safeQuery(context, uri, arrayOf(MediaStore.MediaColumns.DATE_MODIFIED))
             metadataCursor?.use { cursor ->
                 if (cursor.moveToFirst()) {
                     val modifiedIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DATE_MODIFIED)
@@ -85,7 +70,11 @@ data class MediaFile(
             }
 
             val extension = name.substringAfterLast('.', "").lowercase()
-            val providerMime = resolver.getType(uri)?.substringBefore(';')?.trim()?.lowercase()
+            val providerMime = runCatching { resolver.getType(uri) }
+                .getOrNull()
+                ?.substringBefore(';')
+                ?.trim()
+                ?.lowercase()
             val mimeFromExtension = ImageFormatCatalog.mimeTypeForExtension(extension)
                 ?: knownMimeTypes[extension]
                 ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
@@ -98,5 +87,10 @@ data class MediaFile(
             }
             return MediaFile(uri, name, mimeType, size, dateModifiedMillis, albumName)
         }
+
+        private fun safeQuery(context: Context, uri: Uri, projection: Array<String>) =
+            runCatching {
+                context.contentResolver.query(uri, projection, null, null, null)
+            }.getOrNull()
     }
 }

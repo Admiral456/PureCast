@@ -64,6 +64,18 @@ object GroupQueueLogic {
     fun currentIndex(entries: List<GroupQueueEntry>, currentEntryId: String?): Int =
         if (currentEntryId == null) -1 else entries.indexOfFirst { it.id == currentEntryId }
 
+    fun entriesFromParticipant(
+        entries: List<GroupQueueEntry>,
+        participantId: String
+    ): List<GroupQueueEntry> = entries.filter { it.senderParticipantId == participantId }
+
+    fun currentEntryAfterParticipantRemoval(
+        currentEntryId: String?,
+        removedEntries: List<GroupQueueEntry>
+    ): String? = currentEntryId?.takeUnless { current ->
+        removedEntries.any { it.id == current }
+    }
+
     fun nextEntry(entries: List<GroupQueueEntry>, currentEntryId: String?): GroupQueueEntry? {
         val index = nextIndex(currentIndex(entries, currentEntryId), entries.size) ?: return null
         return entries.getOrNull(index)

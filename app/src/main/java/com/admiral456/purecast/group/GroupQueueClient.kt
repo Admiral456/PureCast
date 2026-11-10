@@ -33,6 +33,21 @@ object GroupQueueClient {
         request(credentials.baseUrl, credentials.accessToken, "POST", "/v1/leave", JSONObject(), context)
     }
 
+    fun removeParticipant(
+        credentials: GroupQueueCredentials,
+        participantId: String,
+        context: Context? = null
+    ): GroupQueueSnapshot = parseSnapshot(
+        request(
+            credentials.baseUrl,
+            credentials.accessToken,
+            "POST",
+            "/v1/participants/remove",
+            JSONObject().put("participantId", participantId),
+            context
+        )
+    )
+
     fun add(
         credentials: GroupQueueCredentials,
         title: String,
@@ -79,8 +94,15 @@ object GroupQueueClient {
         context: Context?
     ): JSONObject {
         val targetUrl = URL(baseUrl.trimEnd('/') + path)
-        val wifiNetwork = context?.let(WifiNetworkResolver::activeWifiNetwork)
-        val connection = (wifiNetwork?.openConnection(targetUrl)
+        val destination = try {
+            java.net.InetAddress.getByName(targetUrl.host)
+        } catch (_: Exception) {
+            null
+        }
+        val targetNetwork = destination?.let { address ->
+            context?.let { WifiNetworkResolver.networkForAddress(it, address) }
+        }
+        val connection = (targetNetwork?.openConnection(targetUrl)
             ?: targetUrl.openConnection()) as HttpURLConnection
         try {
             connection.connectTimeout = 5_000
