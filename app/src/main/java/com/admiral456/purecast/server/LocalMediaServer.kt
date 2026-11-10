@@ -1,10 +1,16 @@
 package com.admiral456.purecast.server
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Color
 import android.net.ConnectivityManager
 import android.net.Uri
 import com.admiral456.purecast.media.MediaFile
 import com.admiral456.purecast.network.WifiNetworkResolver
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.MultiFormatWriter
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedOutputStream
@@ -194,6 +200,10 @@ class LocalMediaServer(private val context: Context) : Closeable {
                 return
             }
 
+            if (route == "pair-qr") {
+                writePairingQr(client, method, token)
+                return
+            }
             if (route == "tv") {
                 val ticket = tvPairingRegistry.ticket(token)
                 writeBrowserPlayer(client, method, token, published.media, ticket?.code.orEmpty())
@@ -429,8 +439,9 @@ class LocalMediaServer(private val context: Context) : Closeable {
             }
             else -> ""
         }
+        val pairingQrPath = "/pair-qr/$token"
         val pairingPanel = if (pairingCode.isNotBlank() && media.isVideo) {
-            """<section class="pairing"><span>Jednorázový kód pro PureCast</span><strong>$pairingCode</strong><small>Zadej tento kód v aplikaci PureCast v telefonu. Platí 5 minut.</small></section>"""
+            """<section class="pairing"><div class="pairing-content"><div class="pairing-code"><span>Jednorázový kód pro PureCast</span><strong>$pairingCode</strong><small>Zadej tento kód v aplikaci PureCast v telefonu. QR kód můžeš naskenovat fotoaparátem. Platí 5 minut.</small></div><img class="pairing-qr" src="$pairingQrPath" alt="QR kód pro spárování s PureCast"></div><small>Naskenuj QR kód fotoaparátem telefonu. Otevře se aplikace PureCast a televizor se spáruje automaticky.</small></section>"""
         } else {
             ""
         }
@@ -460,7 +471,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
                 img{max-width:100%;max-height:72vh;object-fit:contain}
                 video{width:100%;height:auto;max-height:75vh;object-fit:contain;background:#000}
                 .compatibility{width:100%;margin:0;padding:12px 15px;border:1px solid #293248;border-radius:12px;color:#bdc9e0;font-size:13px;line-height:1.5;background:#121a2a}
-                .pairing{width:100%;display:flex;flex-direction:column;align-items:center;gap:5px;padding:14px;border:1px solid #4059d6;border-radius:14px;background:#121a2a;text-align:center}.pairing span{font-size:12px;color:#bdc9e0}.pairing strong{font-size:36px;letter-spacing:9px;color:#fff;font-variant-numeric:tabular-nums}.pairing small{font-size:11px;line-height:1.4;color:#9eabc5}
+                .pairing{width:100%;display:flex;flex-direction:column;align-items:center;gap:12px;padding:14px;border:1px solid #4059d6;border-radius:14px;background:#121a2a;text-align:center}.pairing-content{display:flex;align-items:center;justify-content:center;gap:22px;flex-wrap:wrap}.pairing-code{display:flex;flex-direction:column;align-items:center;gap:5px}.pairing span{font-size:12px;color:#bdc9e0}.pairing strong{font-size:36px;letter-spacing:9px;color:#fff;font-variant-numeric:tabular-nums}.pairing small{font-size:11px;line-height:1.4;color:#9eabc5}.pairing-qr{width:190px;height:190px;max-width:42vw;max-height:42vw;padding:7px;border-radius:10px;background:#fff;image-rendering:pixelated}
                 .quality{font-size:12px;color:#8592ac;text-align:center}
                 a{color:#aebeff}
               </style>
@@ -518,6 +529,64 @@ class LocalMediaServer(private val context: Context) : Closeable {
         )
         output.write(payload)
         output.flush()
+    }
+
+    private fun writePairingQr(socket: Socket, method: String, token: String) {
+        val ticket = tvPairingRegistry.ticket(token)
+        if (ticket == null) {
+            writeSimpleResponse(socket, 410, "Gone")
+            return
+        }
+        val address = boundAddress?.hostAddress
+        val port = serverSocket?.localPort
+        if (address.isNullOrBlank() || port == null || port <= 0) {
+            writeSimpleResponse(socket, 503, "Service Unavailable")
+            return
+        }
+
+        try {
+            val browserUrl = "http://$address:$port/tv/$token"
+            val deepLink = TvPairingDeepLink.create(browserUrl, ticket.code)
+            val matrix = MultiFormatWriter().encode(
+                deepLink,
+                BarcodeFormat.QR_CODE,
+                QR_IMAGE_SIZE,
+                QR_IMAGE_SIZE,
+                mapOf(
+                    EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
+                    EncodeHintType.MARGIN to 2,
+                    EncodeHintType.CHARACTER_SET to "UTF-8"
+                )
+            )
+            val bitmap = Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888)
+            for (y in 0 until matrix.height) {
+                for (x in 0 until matrix.width) {
+                    bitmap.setPixel(x, y, if (matrix.get(x, y)) Color.BLACK else Color.WHITE)
+                }
+            }
+            val imageBytes = ByteArrayOutputStream().use { buffer ->
+                val compressed = bitmap.compress(Bitmap.CompressFormat.PNG, 100, buffer)
+                bitmap.recycle()
+                if (!compressed) {
+                    writeSimpleResponse(socket, 500, "QR Encoding Failed")
+                    return
+                }
+                buffer.toByteArray()
+            }
+            val output = BufferedOutputStream(socket.getOutputStream())
+            output.write(
+                ("HTTP/1.1 200 OK\r\n" +
+                    "Content-Type: image/png\r\n" +
+                    "Content-Length: ${imageBytes.size}\r\n" +
+                    "Cache-Control: no-store\r\n" +
+                    "X-Content-Type-Options: nosniff\r\n" +
+                    "Connection: close\r\n\r\n").toByteArray(Charsets.US_ASCII)
+            )
+            if (method != "HEAD") output.write(imageBytes)
+            output.flush()
+        } catch (_: Exception) {
+            writeSimpleResponse(socket, 500, "QR Encoding Failed")
+        }
     }
 
     private fun skipFully(input: InputStream, bytes: Long) {
@@ -647,6 +716,7 @@ class LocalMediaServer(private val context: Context) : Closeable {
         private const val CLIENT_KEEP_ALIVE_SECONDS = 30L
         private const val TOKEN_LIFETIME_MS = 6 * 60 * 60 * 1_000L
         private val TOKEN_PATTERN = Regex("^[A-Za-z0-9_-]{12}$")
-        private val MEDIA_PATH = Regex("^/(media|tv|control)/([A-Za-z0-9_-]{12})$")
+        private const val QR_IMAGE_SIZE = 320
+        private val MEDIA_PATH = Regex("^/(media|tv|control|pair-qr)/([A-Za-z0-9_-]{12})$")
     }
 }
