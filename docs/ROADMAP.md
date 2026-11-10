@@ -82,6 +82,8 @@
 - [ ] Add large-file, slow-network and interrupted-transfer stress tests.
 - [ ] Add explicit media server access revocation and token refresh.
 - [x] Revoke a participant token and remove their submitted items when they explicitly leave the group.
+- [x] Add one-time six-digit pairing codes for TV-browser sessions, with five-minute expiry, a five-attempt lockout and phone-side confirmation.
+- [x] Add paired TV-browser remote commands for play, pause and stop over the local Wi-Fi connection.
 - [ ] Add QR-code pairing, persistent sessions and host-initiated participant removal.
 - [ ] Add integration tests for the shared-queue HTTP server/client and multi-phone media streaming.
 - [x] Keep shared playback controls visible when the currently playing item was added by another phone.
