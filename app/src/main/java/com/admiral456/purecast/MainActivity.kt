@@ -61,7 +61,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -92,12 +91,10 @@ import com.admiral456.purecast.dlna.UpnpTime
 import com.admiral456.purecast.media.MediaFile
 import com.admiral456.purecast.media.MediaImportPolicy
 import com.admiral456.purecast.media.MediaGalleryTile
-import com.admiral456.purecast.media.MediaInspector
 import com.admiral456.purecast.media.MediaKindFilter
 import com.admiral456.purecast.media.MediaLibraryFilter
 import com.admiral456.purecast.media.MediaLibrarySort
 import com.admiral456.purecast.media.MediaThumbnailLoader
-import com.admiral456.purecast.media.MediaTechnicalInfo
 import com.admiral456.purecast.media.MediaStoreGallery
 import com.admiral456.purecast.permissions.GalleryAccessPolicy
 import com.admiral456.purecast.group.GroupQueueClient
@@ -116,8 +113,6 @@ import com.admiral456.purecast.server.TvPairingLaunch
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -197,8 +192,7 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
     var groupCodeInput by remember { mutableStateOf("") }
     var sharedBusy by remember { mutableStateOf(false) }
     var sharedSyncError by remember { mutableStateOf<String?>(null) }
-    val technicalInfo = remember { mutableStateMapOf<String, MediaTechnicalInfo>() }
-    var mediaInspectionJob by remember { mutableStateOf<Job?>(null) }
+    var mediaImportJob by remember { mutableStateOf<Job?>(null) }
     var mediaSearchQuery by remember { mutableStateOf("") }
     var mediaKindFilter by remember { mutableStateOf(MediaKindFilter.ALL) }
     var mediaSort by remember { mutableStateOf(MediaLibrarySort.NEWEST) }
@@ -289,21 +283,21 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
             return
         }
 
-        candidateUris.forEach { uri ->
-            try {
-                appContext.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (_: Exception) {
-                // Photo Picker and some document providers grant temporary read access only.
-            }
-        }
-
-        mediaInspectionJob?.cancel()
-        mediaInspectionJob = scope.launch {
+        mediaImportJob?.cancel()
+        mediaImportJob = scope.launch {
             var readFailures = 0
             val importedFiles = withContext(Dispatchers.IO) {
+                candidateUris.forEach { uri ->
+                    currentCoroutineContext().ensureActive()
+                    try {
+                        appContext.contentResolver.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    } catch (_: Exception) {
+                        // Photo Picker and some providers grant temporary access only.
+                    }
+                }
                 buildList {
                     for (uri in candidateUris) {
                         currentCoroutineContext().ensureActive()
@@ -316,7 +310,6 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
             val mediaFiles = importedFiles.filter { it.isPlayableMedia }
             val canReplaceCurrentLibrary = !appendToLibrary && mediaFiles.isNotEmpty()
             if (canReplaceCurrentLibrary) {
-                technicalInfo.clear()
                 selectedFiles.clear()
                 selectedAlbum = null
             }
@@ -349,23 +342,7 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
                 skippedNonMedia > 0 ->
                     "Načteno ${files.size} obrázků a videí. Ostatní dokumenty byly přeskočeny."
                 else ->
-                    "Načteno ${files.size} souborů. Náhledy a technické údaje se připravují na pozadí."
-            }
-
-            // A smaller batch keeps native metadata readers from competing for memory on
-            // phones with less RAM, especially when several high-resolution videos are chosen.
-            files.chunked(2).forEach { batch ->
-                val details = batch.map { file ->
-                    async(Dispatchers.IO) {
-                        runCatching {
-                            MediaInspector.inspect(appContext, file)?.let { file.uri.toString() to it }
-                        }.getOrNull()
-                    }
-                }.awaitAll().filterNotNull()
-                details.forEach { (uri, info) -> technicalInfo[uri] = info }
-            }
-            if (files.isNotEmpty()) {
-                status = "Připraveno ${selectedFiles.size} souborů. Vyber televizi a spusť přehrávání."
+                    "Načteno ${files.size} souborů. Náhledy se připravují; technické údaje načteš tlačítkem Info u položky."
             }
         }
     }
@@ -1346,25 +1323,10 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 gridItems(visibleFiles, key = { it.uri.toString() }) { file ->
-                                    val info = technicalInfo[file.uri.toString()]
-                                    val technicalSummary = info?.let {
-                                        listOfNotNull(
-                                            it.resolutionLabel(),
-                                            it.frameRate?.let { fps -> String.format(Locale.US, "%.2f FPS", fps) },
-                                            it.videoMimeType,
-                                            it.audioMimeTypes.firstOrNull(),
-                                            it.bitrateBitsPerSecond?.let(::formatBitrate),
-                                            it.durationMillis?.let { duration ->
-                                                "Délka " + formatPlaybackTime(duration / 1_000L)
-                                            },
-                                            if (file.isVideo) "HDR " + (it.hdrLabel ?: "neověřeno") else null
-                                        ).take(4).joinToString(" · ")
-                                    }
                                     val isQueued = playbackQueue.any { it.uri == file.uri }
                                     MediaGalleryTile(
                                         file = file,
                                         sizeLabel = formatSize(file.sizeBytes),
-                                        technicalSummary = technicalSummary,
                                         isBusy = busyLabel == file.displayName,
                                         isQueued = isQueued,
                                         canPlayDlna = activeDevice != null && busyLabel == null && file.isPlayableMedia,
@@ -1938,15 +1900,6 @@ private fun MediaThumbnail(media: MediaFile) {
             MediaThumbnailLoader.loadLimited(context, media)
         }.getOrNull()
     }
-    DisposableEffect(bitmap) {
-        onDispose {
-            bitmap?.let { thumbnail ->
-                runCatching {
-                    if (!thumbnail.isRecycled) thumbnail.recycle()
-                }
-            }
-        }
-    }
     Box(
         modifier = Modifier
             .size(82.dp)
@@ -2018,11 +1971,6 @@ private fun EmptyState(title: String, body: String) {
 
 private fun formatPlaybackTime(seconds: Long?): String =
     seconds?.let(UpnpTime::formatSeconds) ?: "--:--:--"
-
-private fun formatBitrate(bitsPerSecond: Long): String {
-    val megabits = bitsPerSecond / 1_000_000.0
-    return String.format(Locale.US, "%.1f Mbps", megabits)
-}
 
 private fun formatSize(bytes: Long?): String {
     if (bytes == null || bytes < 0L) return "Velikost neznámá"
