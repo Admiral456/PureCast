@@ -119,7 +119,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private const val MAX_SELECTED_MEDIA = 50
+private const val MAX_SELECTED_MEDIA = 150
 
 private enum class PureCastTab { GALLERY, TELEVISION, PLAYBACK, SHARED }
 private const val MAX_GALLERY_SCAN_ITEMS = 250
@@ -253,7 +253,7 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
     fun importMediaUris(uris: List<Uri>, appendToLibrary: Boolean) {
         if (uris.isEmpty()) return
 
-        // Apply the 50-item limit before querying Android's providers. OpenMultipleDocuments
+        // Apply the 150-item limit before querying Android's providers. OpenMultipleDocuments
         // can return hundreds of URIs even though the in-app library has a strict size cap.
         val existingUriKeys = if (appendToLibrary) {
             selectedFiles.map { it.uri.toString() }.toSet()
