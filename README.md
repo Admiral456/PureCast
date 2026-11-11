@@ -30,7 +30,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - After pairing, the phone can remotely play, pause and stop the browser video over the same local Wi-Fi connection.
 - Foreground media-playback service to keep streaming active when the app is backgrounded or the display turns off.
 - Android Photo Picker plus a multi-select Android document picker for image/video files and less common formats, with persistent URI permission where supported. Non-media documents are skipped and cannot be sent to the TV or added to playback queues.
-- Media selection is capped before provider metadata is queried; duplicate and over-limit URIs are filtered early, optional metadata reads are batched conservatively, and thumbnail decode failures fall back to lightweight media placeholders.
+- Media selection is capped at 150 photos and videos combined before provider metadata is queried; duplicate and over-limit URIs are filtered early, optional metadata reads are batched conservatively, and thumbnail decode failures fall back to lightweight media placeholders.
 - Optional full gallery access using Android runtime permissions, requested only after the user taps the gallery access control.
 - Permission-aware MediaStore gallery browsing with full, selected-only, images-only, videos-only and denied states; Android 14+ selected-photo access is supported.
 - Gallery import queries Android image and video collections independently, tolerates provider-specific query failures and merges the results by newest date before applying the scan limit.
