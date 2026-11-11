@@ -23,9 +23,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,14 +38,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 
 @Composable
 fun MediaGalleryTile(
     file: MediaFile,
     sizeLabel: String,
-    technicalSummary: String?,
     isBusy: Boolean,
     isQueued: Boolean,
     canPlayDlna: Boolean,
@@ -57,17 +58,13 @@ fun MediaGalleryTile(
     onAddToSharedQueue: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var showTechnicalInfo by remember(file.uri) { mutableStateOf(false) }
+    var technicalInfo by remember(file.uri) { mutableStateOf<MediaTechnicalInfo?>(null) }
+    var technicalInfoRequested by remember(file.uri) { mutableStateOf(false) }
+    var loadingTechnicalInfo by remember(file.uri) { mutableStateOf(false) }
     val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = file.uri) {
-        value = withContext(Dispatchers.IO) {
-            MediaThumbnailLoader.load(context, file)
-        }
-    }
-    DisposableEffect(bitmap) {
-        onDispose {
-            bitmap?.let { thumbnail ->
-                if (!thumbnail.isRecycled) thumbnail.recycle()
-            }
-        }
+        value = MediaThumbnailLoader.loadLimited(context, file)
     }
 
     Card(
@@ -129,9 +126,38 @@ fun MediaGalleryTile(
                     overflow = TextOverflow.Ellipsis
                 )
                 TextButton(
+                    onClick = {
+                        showTechnicalInfo = !showTechnicalInfo
+                        if (showTechnicalInfo && !technicalInfoRequested) {
+                            technicalInfoRequested = true
+                            scope.launch {
+                                loadingTechnicalInfo = true
+                                try {
+                                    technicalInfo = MediaInspector.inspectLimited(context, file)
+                                } finally {
+                                    loadingTechnicalInfo = false
+                                }
+                            }
+                        }
+                    },
+                    contentPadding = PaddingValues(horizontal = 3.dp, vertical = 0.dp)
+                ) { Text("Info", style = MaterialTheme.typography.labelSmall) }
+                TextButton(
                     onClick = onRemove,
                     contentPadding = PaddingValues(horizontal = 3.dp, vertical = 0.dp)
                 ) { Text("Odebrat", style = MaterialTheme.typography.labelSmall) }
+            }
+            if (showTechnicalInfo) {
+                val summary = technicalInfo?.summary(file.isVideo)
+                Text(
+                    when {
+                        loadingTechnicalInfo -> "Načítám technické údaje…"
+                        summary != null -> summary
+                        else -> "Technické údaje se nepodařilo přečíst. Soubor můžeš přesto odeslat do TV."
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
             }
             Text(
                 "${file.mimeType} · $sizeLabel",
@@ -140,16 +166,6 @@ fun MediaGalleryTile(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            if (!technicalSummary.isNullOrBlank()) {
-                Text(
-                    technicalSummary,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Button(
                     onClick = onPlayDlna,

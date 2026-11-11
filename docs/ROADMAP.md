@@ -9,6 +9,7 @@
 - [x] Czech light/dark UI.
 - [x] Photo Picker selection and URI permission retention where supported.
 - [x] Version-aware gallery runtime permissions for Android 12 and older, Android 13, and Android 14+.
+- [x] Query image and video MediaStore collections independently, merge by date and isolate provider failures.
 - [x] Android 14+ selected-photo and video access, including full, limited, images-only and videos-only states.
 - [x] In-app gallery permission rationale, status, gallery loading and shortcut to app permission settings.
 - [x] Keep Photo Picker and document picker available when broad gallery access is denied.
@@ -40,6 +41,12 @@
 - [x] Normalize MIME types and DLNA protocolInfo parameters before compatibility checks.
 - [x] Add actual image load/error feedback and decoded dimensions to the TV-browser player.
 - [x] Skip non-image and non-video documents from the document picker.
+- [x] Apply the media library limit before querying provider metadata and deduplicate selected document URIs before opening them.
+- [x] Persist document URI grants and read provider metadata on IO, isolating individual URI failures.
+- [x] Share a bounded concurrency gate between gallery previews and requested metadata inspection.
+- [x] Use platform-managed downsampled thumbnails on Android 10+ and show placeholders when safe previews are unavailable.
+- [x] Defer native video metadata parsing until the user requests details for an individual card.
+- [x] Bound legacy video-frame thumbnails and keep preview/metadata allocation failures from interrupting media selection.
 - [x] Route DLNA SOAP commands and shared-queue client requests over the active Wi-Fi network when available.
 - [x] Fail clearly if the SSDP multicast socket cannot bind to the selected Wi-Fi network.
 - [x] Limit UPnP device descriptions, SOAP replies and shared-queue JSON replies to 1 MiB before parsing.

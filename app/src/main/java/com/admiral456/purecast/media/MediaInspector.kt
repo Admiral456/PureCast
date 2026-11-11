@@ -7,7 +7,12 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.os.Build
-
+import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 data class MediaTechnicalInfo(
     val width: Int? = null,
     val height: Int? = null,
@@ -20,11 +25,56 @@ data class MediaTechnicalInfo(
     val rotationDegrees: Int? = null
 ) {
     fun resolutionLabel(): String? =
-        if (width != null && height != null) "${width} × ${height}" else null
+        if (width != null && width > 0 && height != null && height > 0) "${width} × ${height}" else null
+
+    fun summary(isVideo: Boolean): String? {
+        val values = buildList {
+            resolutionLabel()?.let(::add)
+            frameRate?.takeIf { it.isFinite() && it > 0.0 }?.let {
+                add(String.format(Locale.US, "%.2f FPS", it))
+            }
+            videoMimeType?.takeIf { it.isNotBlank() }?.let(::add)
+            audioMimeTypes.firstOrNull()?.let(::add)
+            bitrateBitsPerSecond?.takeIf { it > 0L }?.let {
+                add(String.format(Locale.US, "%.1f Mbps", it / 1_000_000.0))
+            }
+            durationMillis?.takeIf { it > 0L }?.let {
+                val seconds = it / 1_000L
+                add("Délka %02d:%02d:%02d".format(
+                    seconds / 3_600L,
+                    (seconds % 3_600L) / 60L,
+                    seconds % 60L
+                ))
+            }
+            if (isVideo) add("HDR ${hdrLabel ?: "neověřeno"}")
+        }
+        return values.take(5).joinToString(" · ").ifBlank { null }
+    }
 }
 
 object MediaInspector {
-    fun inspect(context: Context, media: MediaFile): MediaTechnicalInfo? {
+    suspend fun inspectLimited(context: Context, media: MediaFile): MediaTechnicalInfo? =
+        MediaProcessingGate.withPermit {
+            // Let one requested native inspection finish, then discard the result if its
+            // card left composition or the import screen was closed.
+            val result = withContext(NonCancellable + Dispatchers.IO) {
+                inspect(context, media)
+            }
+            currentCoroutineContext().ensureActive()
+            result
+        }
+
+    fun inspect(context: Context, media: MediaFile): MediaTechnicalInfo? =
+        try {
+            inspectInternal(context, media)
+        } catch (_: OutOfMemoryError) {
+            // Metadata is supplementary. Keep the selected original media usable without it.
+            null
+        } catch (_: Exception) {
+            null
+        }
+
+    private fun inspectInternal(context: Context, media: MediaFile): MediaTechnicalInfo? {
         if (media.isImage) return inspectImage(context, media)
         if (!media.isVideo) return null
 

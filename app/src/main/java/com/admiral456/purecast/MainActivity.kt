@@ -61,7 +61,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -90,13 +89,12 @@ import com.admiral456.purecast.dlna.DlnaTransportInfo
 import com.admiral456.purecast.dlna.DlnaPositionInfo
 import com.admiral456.purecast.dlna.UpnpTime
 import com.admiral456.purecast.media.MediaFile
+import com.admiral456.purecast.media.MediaImportPolicy
 import com.admiral456.purecast.media.MediaGalleryTile
-import com.admiral456.purecast.media.MediaInspector
 import com.admiral456.purecast.media.MediaKindFilter
 import com.admiral456.purecast.media.MediaLibraryFilter
 import com.admiral456.purecast.media.MediaLibrarySort
 import com.admiral456.purecast.media.MediaThumbnailLoader
-import com.admiral456.purecast.media.MediaTechnicalInfo
 import com.admiral456.purecast.media.MediaStoreGallery
 import com.admiral456.purecast.permissions.GalleryAccessPolicy
 import com.admiral456.purecast.group.GroupQueueClient
@@ -115,13 +113,13 @@ import com.admiral456.purecast.server.TvPairingLaunch
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private const val MAX_SELECTED_MEDIA = 50
+private const val MAX_SELECTED_MEDIA = 150
 
 private enum class PureCastTab { GALLERY, TELEVISION, PLAYBACK, SHARED }
 private const val MAX_GALLERY_SCAN_ITEMS = 250
@@ -194,8 +192,7 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
     var groupCodeInput by remember { mutableStateOf("") }
     var sharedBusy by remember { mutableStateOf(false) }
     var sharedSyncError by remember { mutableStateOf<String?>(null) }
-    val technicalInfo = remember { mutableStateMapOf<String, MediaTechnicalInfo>() }
-    var mediaInspectionJob by remember { mutableStateOf<Job?>(null) }
+    var mediaImportJob by remember { mutableStateOf<Job?>(null) }
     var mediaSearchQuery by remember { mutableStateOf("") }
     var mediaKindFilter by remember { mutableStateOf(MediaKindFilter.ALL) }
     var mediaSort by remember { mutableStateOf(MediaLibrarySort.NEWEST) }
@@ -255,69 +252,97 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
 
     fun importMediaUris(uris: List<Uri>, appendToLibrary: Boolean) {
         if (uris.isEmpty()) return
-        uris.forEach { uri ->
-            try {
-                appContext.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (_: SecurityException) {
-                // Some picker implementations provide temporary grants only.
-            } catch (_: IllegalArgumentException) {
-                // Some picker implementations do not offer persistable grants.
-            }
+
+        // Apply the 150-item limit before querying Android's providers. OpenMultipleDocuments
+        // can return hundreds of URIs even though the in-app library has a strict size cap.
+        val existingUriKeys = if (appendToLibrary) {
+            selectedFiles.map { it.uri.toString() }.toSet()
+        } else {
+            emptySet()
         }
-        mediaInspectionJob?.cancel()
-        mediaInspectionJob = scope.launch {
+        val importPlan = MediaImportPolicy.plan(
+            selectedUriKeys = uris.map { it.toString() },
+            existingUriKeys = existingUriKeys,
+            currentItemCount = selectedFiles.size,
+            maxItems = MAX_SELECTED_MEDIA,
+            appendToLibrary = appendToLibrary
+        )
+        val allowedKeys = importPlan.acceptedUriKeys.toHashSet()
+        val candidateUris = uris.distinctBy { it.toString() }
+            .filter { it.toString() in allowedKeys }
+
+        if (candidateUris.isEmpty()) {
+            isError = importPlan.skippedByLimit > 0
+            status = when {
+                importPlan.skippedByLimit > 0 ->
+                    "Knihovna už obsahuje maximum $MAX_SELECTED_MEDIA souborů."
+                importPlan.alreadyPresentCount > 0 ->
+                    "Vybrané obrázky a videa už v knihovně jsou."
+                else -> "Nebyl vybrán žádný nový soubor."
+            }
+            return
+        }
+
+        mediaImportJob?.cancel()
+        mediaImportJob = scope.launch {
+            var readFailures = 0
             val importedFiles = withContext(Dispatchers.IO) {
-                uris.distinctBy { it.toString() }
-                    .mapNotNull { uri -> runCatching { MediaFile.fromUri(appContext, uri) }.getOrNull() }
+                candidateUris.forEach { uri ->
+                    currentCoroutineContext().ensureActive()
+                    try {
+                        appContext.contentResolver.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    } catch (_: Exception) {
+                        // Photo Picker and some providers grant temporary access only.
+                    }
+                }
+                buildList {
+                    for (uri in candidateUris) {
+                        currentCoroutineContext().ensureActive()
+                        val result = runCatching { MediaFile.fromUri(appContext, uri) }
+                        if (result.isFailure) readFailures++
+                        result.getOrNull()?.let(::add)
+                    }
+                }
             }
             val mediaFiles = importedFiles.filter { it.isPlayableMedia }
-            val existingUris = if (appendToLibrary) selectedFiles.map { it.uri }.toSet() else emptySet()
-            val availableSlots = if (appendToLibrary) {
-                (MAX_SELECTED_MEDIA - selectedFiles.size).coerceAtLeast(0)
-            } else {
-                MAX_SELECTED_MEDIA
-            }
-            val uniqueFiles = mediaFiles.filterNot { it.uri in existingUris }
-            val files = uniqueFiles.take(availableSlots)
-            val skippedNonMedia = importedFiles.size - mediaFiles.size
-
-            if (!appendToLibrary) {
-                technicalInfo.clear()
+            val canReplaceCurrentLibrary = !appendToLibrary && mediaFiles.isNotEmpty()
+            if (canReplaceCurrentLibrary) {
                 selectedFiles.clear()
                 selectedAlbum = null
             }
+
+            val existingUris = selectedFiles.map { it.uri }.toSet()
+            val availableSlots = (MAX_SELECTED_MEDIA - selectedFiles.size).coerceAtLeast(0)
+            val uniqueFiles = mediaFiles.filterNot { it.uri in existingUris }
+            val files = uniqueFiles.take(availableSlots)
+            val skippedNonMedia = importedFiles.size - mediaFiles.size
             selectedFiles.addAll(files)
             mediaSearchQuery = ""
             mediaKindFilter = MediaKindFilter.ALL
             isError = importedFiles.isEmpty() || mediaFiles.isEmpty() ||
                 (files.isEmpty() && availableSlots == 0)
             status = when {
-                importedFiles.isEmpty() -> "Vybrané soubory se nepodařilo načíst."
-                mediaFiles.isEmpty() -> "Výběr neobsahuje rozpoznané obrázky ani videa. Ostatní dokumenty PureCast nepřehrává."
-                files.isEmpty() && availableSlots == 0 -> "Knihovna už obsahuje maximum $MAX_SELECTED_MEDIA souborů."
-                files.isEmpty() -> "Vybrané obrázky a videa už v knihovně jsou."
-                uniqueFiles.size > files.size ->
-                    "Přidáno ${files.size} médií. Knihovna podporuje nejvýše $MAX_SELECTED_MEDIA položek."
+                importedFiles.isEmpty() && readFailures > 0 ->
+                    "Android nedokázal otevřít vybrané soubory. Zkontroluj jejich oprávnění nebo je vyber znovu."
+                importedFiles.isEmpty() ->
+                    "Vybrané soubory se nepodařilo načíst."
+                mediaFiles.isEmpty() ->
+                    "Výběr neobsahuje rozpoznané obrázky ani videa. Ostatní dokumenty PureCast nepřehrává."
+                files.isEmpty() && availableSlots == 0 ->
+                    "Knihovna už obsahuje maximum $MAX_SELECTED_MEDIA souborů."
+                files.isEmpty() ->
+                    "Vybrané obrázky a videa už v knihovně jsou."
+                importPlan.skippedByLimit > 0 ->
+                    "Přidáno ${files.size} médií. Dalších ${importPlan.skippedByLimit} položek bylo přeskočeno kvůli limitu $MAX_SELECTED_MEDIA."
+                readFailures > 0 ->
+                    "Přidáno ${files.size} médií. ${readFailures} vybraných souborů se nepodařilo otevřít."
                 skippedNonMedia > 0 ->
                     "Načteno ${files.size} obrázků a videí. Ostatní dokumenty byly přeskočeny."
-                else -> "Načteno ${files.size} souborů. Náhledy a technické údaje se připravují na pozadí."
-            }
-
-            files.chunked(3).forEach { batch ->
-                val details = batch.map { file ->
-                    async(Dispatchers.IO) {
-                        runCatching {
-                            MediaInspector.inspect(appContext, file)?.let { file.uri.toString() to it }
-                        }.getOrNull()
-                    }
-                }.awaitAll().filterNotNull()
-                details.forEach { (uri, info) -> technicalInfo[uri] = info }
-            }
-            if (files.isNotEmpty()) {
-                status = "Připraveno ${selectedFiles.size} souborů. Vyber televizi a spusť přehrávání."
+                else ->
+                    "Načteno ${files.size} souborů. Náhledy se připravují; technické údaje načteš tlačítkem Info u položky."
             }
         }
     }
@@ -1298,25 +1323,10 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 gridItems(visibleFiles, key = { it.uri.toString() }) { file ->
-                                    val info = technicalInfo[file.uri.toString()]
-                                    val technicalSummary = info?.let {
-                                        listOfNotNull(
-                                            it.resolutionLabel(),
-                                            it.frameRate?.let { fps -> String.format(Locale.US, "%.2f FPS", fps) },
-                                            it.videoMimeType,
-                                            it.audioMimeTypes.firstOrNull(),
-                                            it.bitrateBitsPerSecond?.let(::formatBitrate),
-                                            it.durationMillis?.let { duration ->
-                                                "Délka " + formatPlaybackTime(duration / 1_000L)
-                                            },
-                                            if (file.isVideo) "HDR " + (it.hdrLabel ?: "neověřeno") else null
-                                        ).take(4).joinToString(" · ")
-                                    }
                                     val isQueued = playbackQueue.any { it.uri == file.uri }
                                     MediaGalleryTile(
                                         file = file,
                                         sizeLabel = formatSize(file.sizeBytes),
-                                        technicalSummary = technicalSummary,
                                         isBusy = busyLabel == file.displayName,
                                         isQueued = isQueued,
                                         canPlayDlna = activeDevice != null && busyLabel == null && file.isPlayableMedia,
@@ -1326,7 +1336,6 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
                                         canAddToSharedQueue = sharedCredentials != null && !sharedBusy && file.isPlayableMedia,
                                         onRemove = {
                                             selectedFiles.remove(file)
-                                            technicalInfo.remove(file.uri.toString())
                                             val queuedIndex = playbackQueue.indexOfFirst { it.uri == file.uri }
                                             if (queuedIndex >= 0) removeFromQueue(queuedIndex)
                                         },
@@ -1886,16 +1895,7 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
 private fun MediaThumbnail(media: MediaFile) {
     val context = LocalContext.current
     val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = media.uri) {
-        value = withContext(Dispatchers.IO) {
-            MediaThumbnailLoader.load(context, media)
-        }
-    }
-    DisposableEffect(bitmap) {
-        onDispose {
-            bitmap?.let { thumbnail ->
-                if (!thumbnail.isRecycled) thumbnail.recycle()
-            }
-        }
+        value = MediaThumbnailLoader.loadLimited(context, media)
     }
     Box(
         modifier = Modifier
@@ -1968,11 +1968,6 @@ private fun EmptyState(title: String, body: String) {
 
 private fun formatPlaybackTime(seconds: Long?): String =
     seconds?.let(UpnpTime::formatSeconds) ?: "--:--:--"
-
-private fun formatBitrate(bitsPerSecond: Long): String {
-    val megabits = bitsPerSecond / 1_000_000.0
-    return String.format(Locale.US, "%.1f Mbps", megabits)
-}
 
 private fun formatSize(bytes: Long?): String {
     if (bytes == null || bytes < 0L) return "Velikost neznámá"
