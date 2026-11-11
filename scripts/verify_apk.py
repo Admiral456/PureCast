@@ -64,7 +64,7 @@ REQUIRED_DEX_STRINGS = (
     "Android nedokázal otevřít vybrané soubory. Zkontroluj jejich oprávnění nebo je vyber znovu.",
     "Dalších ",
     "položek bylo přeskočeno kvůli limitu",
-    "Technické údaje načteš tlačítkem Info u položky.",
+    "technické údaje načteš tlačítkem Info u položky.",
     "Načítám technické údaje…",
     "Technické údaje se nepodařilo přečíst. Soubor můžeš přesto odeslat do TV.",
     "Galerie je zatím prázdná",
