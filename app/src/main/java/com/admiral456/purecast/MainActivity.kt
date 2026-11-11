@@ -1895,9 +1895,7 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
 private fun MediaThumbnail(media: MediaFile) {
     val context = LocalContext.current
     val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = media.uri) {
-        value = runCatching {
-            MediaThumbnailLoader.loadLimited(context, media)
-        }.getOrNull()
+        value = MediaThumbnailLoader.loadLimited(context, media)
     }
     Box(
         modifier = Modifier
