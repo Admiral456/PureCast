@@ -28,7 +28,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValueimport androidx.compose.ui.Alignment
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
@@ -62,9 +63,7 @@ fun MediaGalleryTile(
     var technicalInfoRequested by remember(file.uri) { mutableStateOf(false) }
     var loadingTechnicalInfo by remember(file.uri) { mutableStateOf(false) }
     val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = file.uri) {
-        value = runCatching {
-            MediaThumbnailLoader.loadLimited(context, file)
-        }.getOrNull()
+        value = MediaThumbnailLoader.loadLimited(context, file)
     }
 
     Card(
