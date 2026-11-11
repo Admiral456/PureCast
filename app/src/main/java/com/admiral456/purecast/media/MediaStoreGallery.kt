@@ -92,25 +92,25 @@ object MediaStoreGallery {
                 selection,
                 null,
                 "${MediaStore.MediaColumns.DATE_ADDED} DESC"
-            ) ?: return emptyList()
+            )
         } catch (_: SecurityException) {
             return emptyList()
-        } catch (_: IllegalArgumentException) {
-            // A vendor provider may not support DATE_ADDED in its projection/sort order.
-            try {
-                resolver.query(
-                    collection,
-                    arrayOf(MediaStore.MediaColumns._ID),
-                    selection,
-                    null,
-                    null
-                ) ?: return emptyList()
-            } catch (_: Exception) {
-                return emptyList()
-            }
         } catch (_: Exception) {
+            null
+        } ?: try {
+            // A vendor provider may reject DATE_ADDED in its projection or sort order.
+            resolver.query(
+                collection,
+                arrayOf(MediaStore.MediaColumns._ID),
+                selection,
+                null,
+                null
+            )
+        } catch (_: SecurityException) {
             return emptyList()
-        }
+        } catch (_: Exception) {
+            null
+        } ?: return emptyList()
 
         return try {
             cursor.use { result ->
