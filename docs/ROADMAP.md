@@ -41,6 +41,10 @@
 - [x] Add actual image load/error feedback and decoded dimensions to the TV-browser player.
 - [x] Skip non-image and non-video documents from the document picker.
 - [x] Apply the media library limit before querying provider metadata and deduplicate selected document URIs before opening them.
+- [x] Persist document URI grants and read provider metadata on IO, isolating individual URI failures.
+- [x] Share a bounded concurrency gate between gallery previews and requested metadata inspection.
+- [x] Use platform-managed downsampled thumbnails on Android 10+ and show placeholders when safe previews are unavailable.
+- [x] Defer native video metadata parsing until the user requests details for an individual card.
 - [x] Bound legacy video-frame thumbnails and keep preview/metadata allocation failures from interrupting media selection.
 - [x] Route DLNA SOAP commands and shared-queue client requests over the active Wi-Fi network when available.
 - [x] Fail clearly if the SSDP multicast socket cannot bind to the selected Wi-Fi network.
