@@ -1336,7 +1336,6 @@ private fun PureCastScreen(initialPairing: com.admiral456.purecast.server.TvPair
                                         canAddToSharedQueue = sharedCredentials != null && !sharedBusy && file.isPlayableMedia,
                                         onRemove = {
                                             selectedFiles.remove(file)
-                                            technicalInfo.remove(file.uri.toString())
                                             val queuedIndex = playbackQueue.indexOfFirst { it.uri == file.uri }
                                             if (queuedIndex >= 0) removeFromQueue(queuedIndex)
                                         },
