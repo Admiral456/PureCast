@@ -9,6 +9,7 @@
 - [x] Czech light/dark UI.
 - [x] Photo Picker selection and URI permission retention where supported.
 - [x] Version-aware gallery runtime permissions for Android 12 and older, Android 13, and Android 14+.
+- [x] Query image and video MediaStore collections independently, merge by date and isolate provider failures.
 - [x] Android 14+ selected-photo and video access, including full, limited, images-only and videos-only states.
 - [x] In-app gallery permission rationale, status, gallery loading and shortcut to app permission settings.
 - [x] Keep Photo Picker and document picker available when broad gallery access is denied.
