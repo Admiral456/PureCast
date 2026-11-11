@@ -166,16 +166,6 @@ fun MediaGalleryTile(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            if (!technicalSummary.isNullOrBlank()) {
-                Text(
-                    technicalSummary,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Button(
                     onClick = onPlayDlna,
