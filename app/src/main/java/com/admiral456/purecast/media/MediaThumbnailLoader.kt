@@ -8,23 +8,32 @@ import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.util.Size
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 object MediaThumbnailLoader {
-    // Only two native thumbnail decoders may allocate bitmaps at the same time.
-    private val decodeSemaphore = Semaphore(2)
-
     suspend fun loadLimited(
         context: Context,
         media: MediaFile,
         targetWidth: Int = DEFAULT_THUMBNAIL_WIDTH,
         targetHeight: Int = DEFAULT_THUMBNAIL_HEIGHT
-    ): Bitmap? = decodeSemaphore.withPermit {
-        withContext(Dispatchers.IO) {
+    ): Bitmap? = MediaProcessingGate.withPermit {
+        currentCoroutineContext().ensureActive()
+        // Native decoders may ignore cancellation. Finish bounded work, then dispose of
+        // the bitmap if its gallery item was removed before the preview was delivered.
+        val bitmap = withContext(NonCancellable + Dispatchers.IO) {
             load(context, media, targetWidth, targetHeight)
+        }
+        try {
+            currentCoroutineContext().ensureActive()
+            bitmap
+        } catch (cancelled: CancellationException) {
+            runCatching { bitmap?.recycle() }
+            throw cancelled
         }
     }
     fun load(
@@ -55,6 +64,8 @@ object MediaThumbnailLoader {
         targetHeight: Int
     ): Bitmap? {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Android 10+ provides downsampled previews through the content provider.
+            // Do not fall back to parsing source video during gallery selection.
             val providerThumbnail = try {
                 context.contentResolver.loadThumbnail(
                     media.uri,
@@ -64,16 +75,16 @@ object MediaThumbnailLoader {
             } catch (_: OutOfMemoryError) {
                 return null
             } catch (_: Exception) {
+                return null
+            } ?: return null
+            return try {
+                providerThumbnail.fitInside(targetWidth, targetHeight)
+            } catch (_: OutOfMemoryError) {
+                runCatching { providerThumbnail.recycle() }
                 null
-            }
-            if (providerThumbnail != null) {
-                try {
-                    return providerThumbnail.fitInside(targetWidth, targetHeight)
-                } catch (_: OutOfMemoryError) {
-                    return null
-                } catch (_: Exception) {
-                    runCatching { providerThumbnail.recycle() }
-                }
+            } catch (_: Exception) {
+                runCatching { providerThumbnail.recycle() }
+                null
             }
         }
 
