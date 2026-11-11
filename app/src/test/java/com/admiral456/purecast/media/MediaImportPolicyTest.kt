@@ -10,7 +10,7 @@ class MediaImportPolicyTest {
             selectedUriKeys = listOf("a", "b", "a", "c", "b"),
             existingUriKeys = emptySet(),
             currentItemCount = 0,
-            maxItems = 50,
+            maxItems = 150,
             appendToLibrary = false
         )
 
@@ -24,8 +24,8 @@ class MediaImportPolicyTest {
         val plan = MediaImportPolicy.plan(
             selectedUriKeys = listOf("a", "b", "c", "d"),
             existingUriKeys = setOf("a", "c"),
-            currentItemCount = 48,
-            maxItems = 50,
+            currentItemCount = 148,
+            maxItems = 150,
             appendToLibrary = true
         )
 
@@ -37,18 +37,18 @@ class MediaImportPolicyTest {
 
     @Test
     fun enforcesTheLibraryLimitBeforeAnyMetadataWork() {
-        val keys = (1..80).map { "uri-$it" }
+        val keys = (1..180).map { "uri-$it" }
         val plan = MediaImportPolicy.plan(
             selectedUriKeys = keys,
             existingUriKeys = emptySet(),
             currentItemCount = 0,
-            maxItems = 50,
+            maxItems = 150,
             appendToLibrary = false
         )
 
-        assertEquals(50, plan.acceptedUriKeys.size)
+        assertEquals(150, plan.acceptedUriKeys.size)
         assertEquals(30, plan.skippedByLimit)
-        assertEquals(keys.take(50), plan.acceptedUriKeys)
+        assertEquals(keys.take(150), plan.acceptedUriKeys)
     }
 
     @Test
@@ -56,8 +56,8 @@ class MediaImportPolicyTest {
         val plan = MediaImportPolicy.plan(
             selectedUriKeys = listOf("new-a", "new-b"),
             existingUriKeys = emptySet(),
-            currentItemCount = 50,
-            maxItems = 50,
+            currentItemCount = 150,
+            maxItems = 150,
             appendToLibrary = true
         )
 
