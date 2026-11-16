@@ -115,7 +115,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private const val MAX_SELECTED_MEDIA = 50
+private const val MAX_SELECTED_MEDIA = 150
 
 private enum class PureCastTab(val label: String, val glyph: String) {
     CONNECT("Připojit", "TV"),
