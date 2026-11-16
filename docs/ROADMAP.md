@@ -1,5 +1,11 @@
 # PureCast roadmap
 
+## 0.24.0 — Safe cached gallery thumbnails
+- Skip native video-frame decoding for gallery previews; on Android versions without provider video thumbnails, show a placeholder instead of invoking OEM codecs.
+- Cache only display thumbnails in an 8 MiB LRU cache; original media and TV streaming remain untouched.
+- Release cached previews when Android reports memory pressure or a low-memory callback.
+- Test thumbnail bounds, cache budget and memory-trim policy.
+
 ## Milestone 0 — Android cross-brand foundation
 
 - [x] Android/Kotlin/Jetpack Compose application; no iOS target.

@@ -14,7 +14,7 @@ PureCast is an Android application for sending original photos and videos from p
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.22.0
+## Current implementation — 0.24.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes, custom adaptive PureCast launcher icon.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
@@ -38,7 +38,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - Image MIME recognition by extension for JPG/JPEG, PNG/APNG, GIF, WebP, HEIC/HEIF, AVIF, JPEG XL, TIFF, BMP, SVG, JPEG 2000, OpenEXR, DDS, KTX/KTX2, FITS, QOI, and camera RAW formats.
 - Original image MIME types are retained for DLNA and TV-browser requests; known extensions take precedence over generic or incorrect provider MIME labels. Provider MIME parameters are stripped before HTTP and DLNA metadata are generated.
 - Modern image thumbnails and image dimensions use Android ImageDecoder on API 28+ with bounded decode sizes, falling back to BitmapFactory if the platform's modern decoder fails; older Android versions use BitmapFactory for formats available on that system.
-- Image and video thumbnail previews, lazily loaded as gallery items become visible, with memory-conscious handling for older Android versions.
+- Image and video thumbnail previews are loaded lazily. Display-only previews use an 8 MiB LRU cache that is released under Android memory pressure; on Android versions without reliable provider video thumbnails, PureCast shows a placeholder instead of invoking a native video decoder. Original media used for TV playback remains untouched.
 - Separate photo/video gallery filters with live counts and an adaptive grid of media cards; the hero header appears only on the Gallery screen.
 - Dedicated bottom navigation for Gallery, TV, Playback and Shared Queue, with separate app sections and photo/video filters.
 - Gallery search by filename and photo/video filters.
