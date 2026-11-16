@@ -95,6 +95,7 @@ import com.admiral456.purecast.media.MediaKindFilter
 import com.admiral456.purecast.media.MediaLibraryFilter
 import com.admiral456.purecast.media.MediaLibrarySort
 import com.admiral456.purecast.media.MediaThumbnailLoader
+import com.admiral456.purecast.media.MediaThumbnailPolicy
 import com.admiral456.purecast.media.MediaStoreGallery
 import com.admiral456.purecast.permissions.GalleryAccessPolicy
 import com.admiral456.purecast.group.GroupQueueClient
@@ -165,6 +166,18 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pairingLaunch = TvPairingDeepLink.parse(intent.dataString)
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        MediaThumbnailLoader.clearCache()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (MediaThumbnailPolicy.shouldClearCacheOnTrim(level)) {
+            MediaThumbnailLoader.clearCache()
+        }
     }
 }
 
