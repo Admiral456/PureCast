@@ -1,5 +1,11 @@
 # PureCast roadmap
 
+## 0.34.0 — Larger media library
+- Increase the combined photo and video library and one-time picker limit from 50 to 150.
+- Keep early URI deduplication and bounded thumbnail work so the larger library does not trigger unbounded decoder concurrency.
+- Update import-policy regression tests for the 150-item limit.
+
+
 ## 0.33.0 — Avoid stale playback controls (in progress)
 - Disable TV transport commands after repeated failures to refresh the TV's reported state; manual refresh remains available.
 - Hide stale seek position and disable seeking after repeated timeline failures.
