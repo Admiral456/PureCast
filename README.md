@@ -22,7 +22,7 @@ PureCast is an Android application for sending original photos and videos from p
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.24.0
+## Current implementation — 0.34.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes, custom adaptive PureCast launcher icon.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
@@ -41,7 +41,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - Strict shared-queue HTTP request parsing: validates request lines and header syntax, rejects duplicate headers, chunked or encoded bodies, requires a valid fixed Content-Length and JSON content type for POST, caps request sizes, and handles zero-length bulk reads without hanging.
 - TV browser fallback page with responsive playback UI, video MIME hints and actual image load/error feedback including decoded dimensions. The image element and its MIME feedback are checked in the packaged APK.
 - Foreground media-playback service to keep streaming active when the app is backgrounded or the display turns off.
-- Android Photo Picker plus a multi-select Android document picker for image/video files and less common formats, with persistent URI permission where supported. Non-media documents are skipped and cannot be sent to the TV or added to playback queues.
+- Android Photo Picker plus a multi-select Android document picker for image/video files and less common formats, with persistent URI permission where supported. The combined photo/video library and one-time selection limit is 150 items; non-media documents are skipped and cannot be sent to the TV or added to playback queues.
 - Optional full gallery access using Android runtime permissions, requested only after the user taps the gallery access control.
 - Permission-aware MediaStore gallery browsing with full, selected-only, images-only, videos-only and denied states; Android 14+ selected-photo access is supported.
 - A clear in-app permission explanation, a live permission status label, a gallery refresh action and a shortcut to Android app settings. The Photo Picker and document picker remain usable when gallery access is denied.
