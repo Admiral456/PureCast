@@ -21,8 +21,8 @@ class MediaImportPolicyTest {
     fun boundedDistinctStopsAtMaximum() {
         val selected = (1..500).map { "media-$it" }
         assertEquals(
-            (1..50).map { "media-$it" },
-            MediaImportPolicy.boundedDistinct(selected, maxItems = 50, keyOf = { it })
+            (1..150).map { "media-$it" },
+            MediaImportPolicy.boundedDistinct(selected, maxItems = 150, keyOf = { it })
         )
     }
 
@@ -46,8 +46,8 @@ class MediaImportPolicyTest {
 
     @Test
     fun availableSlotsNeverReturnsANegativeValue() {
-        assertEquals(0, MediaImportPolicy.availableSlots(currentCount = 60, maximum = 50))
+        assertEquals(0, MediaImportPolicy.availableSlots(currentCount = 160, maximum = 150))
         assertEquals(0, MediaImportPolicy.availableSlots(currentCount = 5, maximum = 0))
-        assertEquals(45, MediaImportPolicy.availableSlots(currentCount = 5, maximum = 50))
+        assertEquals(145, MediaImportPolicy.availableSlots(currentCount = 5, maximum = 150))
     }
 }
