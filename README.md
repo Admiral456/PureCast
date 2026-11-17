@@ -14,7 +14,7 @@ PureCast is an Android application for sending original photos and videos from p
 
 PureCast does not transcode, recompress, resize, or change the selected media. It serves the selected source URI and asks a compatible DLNA renderer or TV browser to play it. If the TV cannot decode the container, video codec, audio codec, frame rate, or HDR format, playback may fail. PureCast must report that limitation rather than silently lowering quality.
 
-## Current implementation — 0.24.0
+## Current implementation — 0.25.0
 
 - Kotlin + Jetpack Compose, Czech UI, light/dark themes, custom adaptive PureCast launcher icon.
 - Sender device detection for Samsung, Xiaomi, Redmi and generic Android.
@@ -36,6 +36,7 @@ PureCast does not transcode, recompress, resize, or change the selected media. I
 - Gallery import queries Android image and video collections independently, tolerates provider-specific query failures and merges the results by newest date before applying the scan limit.
 - A clear in-app permission explanation, a live permission status label, a gallery refresh action and a shortcut to Android app settings. The Photo Picker and document picker remain usable when gallery access is denied.
 - Image MIME recognition by extension for JPG/JPEG, PNG/APNG, GIF, WebP, HEIC/HEIF, AVIF, JPEG XL, TIFF, BMP, SVG, JPEG 2000, OpenEXR, DDS, KTX/KTX2, FITS, QOI, and camera RAW formats.
+- Common video containers are identified by extension (MP4/M4V, Matroska, QuickTime, AVI, WebM, MPEG, transport streams, 3GPP, FLV, WMV, ASF, Ogg Video and DV); recognized formats are still sent unchanged and must be supported by the TV.
 - Original image MIME types are retained for DLNA and TV-browser requests; known extensions take precedence over generic or incorrect provider MIME labels. Provider MIME parameters are stripped before HTTP and DLNA metadata are generated.
 - Modern image thumbnails and image dimensions use Android ImageDecoder on API 28+ with bounded decode sizes, falling back to BitmapFactory if the platform's modern decoder fails; older Android versions use BitmapFactory for formats available on that system.
 - Image and video thumbnail previews are loaded lazily. Display-only previews use an 8 MiB LRU cache that is released under Android memory pressure; on Android versions without reliable provider video thumbnails, PureCast shows a placeholder instead of invoking a native video decoder. Original media used for TV playback remains untouched.

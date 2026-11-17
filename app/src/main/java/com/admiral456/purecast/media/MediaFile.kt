@@ -19,18 +19,6 @@ data class MediaFile(
     val isPlayableMedia: Boolean get() = isImage || isVideo
 
     companion object {
-        private val knownMimeTypes = mapOf(
-            "mp4" to "video/mp4",
-            "m4v" to "video/x-m4v",
-            "mkv" to "video/x-matroska",
-            "mov" to "video/quicktime",
-            "avi" to "video/x-msvideo",
-            "webm" to "video/webm",
-            "mpg" to "video/mpeg",
-            "mpeg" to "video/mpeg",
-            "3gp" to "video/3gpp"
-        )
-
         fun fromUri(context: Context, uri: Uri): MediaFile? {
             val resolver = context.contentResolver
             var name = uri.lastPathSegment?.substringAfterLast('/') ?: "media"
@@ -105,7 +93,7 @@ data class MediaFile(
                 resolver.getType(uri)?.substringBefore(';')?.trim()?.lowercase()
             }.getOrNull()
             val mimeFromExtension = ImageFormatCatalog.mimeTypeForExtension(extension)
-                ?: knownMimeTypes[extension]
+                ?: VideoFormatCatalog.mimeTypeForExtension(extension)
                 ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
             val mimeType = when {
                 mimeFromExtension != null -> mimeFromExtension

@@ -1,5 +1,11 @@
 # PureCast roadmap
 
+## 0.25.0 — Expanded video format recognition
+- Recognize common video containers by filename extension when Android providers return a generic or incorrect MIME type.
+- Keep the original media URI and bytes unchanged for Direct Play.
+- Add unit tests for common containers, case normalization and unknown extensions.
+- Do not claim codec or TV compatibility from the filename or MIME type alone.
+
 ## 0.24.0 — Safe cached gallery thumbnails
 - Skip native video-frame decoding for gallery previews; on Android versions without provider video thumbnails, show a placeholder instead of invoking OEM codecs.
 - Cache only display thumbnails in an 8 MiB LRU cache; original media and TV streaming remain untouched.
